@@ -28,15 +28,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Handle Magic Link Token Hash Verification
-    if (tokenHash && type) {
-      const { error } = await supabase.auth.verifyOtp({
+    if (tokenHash) {
+      let otpRes = await supabase.auth.verifyOtp({
         token_hash: tokenHash,
-        type: type || 'email',
+        type: type || 'magiclink',
       });
-      if (!error) {
+
+      if (otpRes.error) {
+        // Fallback retry with 'email' type if 'magiclink' fails
+        otpRes = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'email',
+        });
+      }
+
+      if (!otpRes.error) {
         return NextResponse.redirect(`${origin}${next}`);
       }
-      console.warn('[Auth Callback] Token hash verification error:', error.message);
+      console.warn('[Auth Callback] Token hash verification error:', otpRes.error.message);
     }
   } catch (err) {
     console.error('[Auth Callback Exception]', err);

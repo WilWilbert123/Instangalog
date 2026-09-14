@@ -13,7 +13,9 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const host = req.headers.get('host');
+    const protocol = req.headers.get('x-forwarded-proto') || 'https';
+    const origin = req.headers.get('origin') || (host ? `${protocol}://${host}` : null) || process.env.NEXT_PUBLIC_APP_URL || 'https://instangalogpagpag.vercel.app';
     const redirectTo = `${origin}/auth/callback`;
 
     // Check if Resend API key is configured
@@ -29,10 +31,16 @@ export async function POST(req: NextRequest) {
 
         if (error) {
           console.warn('[Admin GenerateLink Error]', error.message);
-        } else if (data?.properties?.action_link) {
+        } else if (data?.properties) {
+          // Construct direct, robust token_hash link to app callback endpoint
+          let magicLinkUrl = data.properties.action_link;
+          if (data.properties.hashed_token) {
+            magicLinkUrl = `${origin}/auth/callback?token_hash=${data.properties.hashed_token}&type=magiclink`;
+          }
+
           const resendResult = await sendMagicLinkEmail({
             email: cleanEmail,
-            magicLinkUrl: data.properties.action_link,
+            magicLinkUrl,
           });
 
           if (resendResult.success) {
