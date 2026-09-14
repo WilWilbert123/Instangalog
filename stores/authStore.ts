@@ -90,7 +90,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'https://instangalogpagpag.vercel.app');
       const redirectTo = `${origin}/auth/callback`;
 
       // 1. Try sending via Resend API route

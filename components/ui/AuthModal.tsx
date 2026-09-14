@@ -5,13 +5,20 @@ import { useAuthStore } from '@/stores/authStore';
 import { X, ShieldCheck, Mail, ArrowRight, Loader2, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 
 export function AuthModal() {
-  const { showAuthModal, authModalActionText, closeAuthModal, loginWithEmail, loginWithGoogle } = useAuthStore();
+  const { user, showAuthModal, authModalActionText, closeAuthModal, loginWithEmail, loginWithGoogle } = useAuthStore();
   const [emailInput, setEmailInput] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Auto-close modal as soon as user session becomes active (e.g. when email link is clicked)
+  useEffect(() => {
+    if (user && showAuthModal) {
+      closeAuthModal();
+    }
+  }, [user, showAuthModal, closeAuthModal]);
 
   // Cooldown countdown timer for resending magic link
   useEffect(() => {
@@ -142,15 +149,25 @@ export function AuthModal() {
               </span>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
                 <Sparkles className="w-3 h-3" />
-                <span>Magic Link Delivered</span>
+                <span>Magic Link Sent</span>
               </div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Check Your Email Inbox</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
-                We sent a magic sign-in link to <span className="font-mono font-bold text-slate-900 dark:text-white">{emailInput}</span>. Open the link in your email to log in automatically.
+                Sent to <span className="font-mono font-bold text-slate-900 dark:text-white">{emailInput}</span>.
               </p>
+
+              <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-left text-xs space-y-1 mt-2">
+                <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                  <span>Next Step: Open your Email App</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Go to your inbox (e.g. Gmail) and click the <strong>&quot;Click Here to Sign In Now&quot;</strong> button inside the email. As soon as you click it, Instangalog will sign you in automatically!
+                </p>
+              </div>
             </div>
 
             {/* Resend Magic Link Button with Cooldown Timer */}
