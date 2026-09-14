@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClientServer } from '@/lib/supabase/server';
+import { upsertProfile } from '@/lib/services/chatService';
 
 /**
  * /auth/callback
@@ -20,11 +21,16 @@ export async function GET(request: NextRequest) {
 
     // 1. Handle PKCE Code Exchange
     if (code) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error && data.user) {
+        await upsertProfile({
+          id: data.user.id,
+          email: data.user.email || '',
+          user_metadata: data.user.user_metadata,
+        });
         return NextResponse.redirect(`${origin}${next}`);
       }
-      console.warn('[Auth Callback] Code exchange error:', error.message);
+      if (error) console.warn('[Auth Callback] Code exchange error:', error.message);
     }
 
     // 2. Handle Magic Link Token Hash Verification
@@ -42,10 +48,15 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      if (!otpRes.error) {
+      if (!otpRes.error && otpRes.data.user) {
+        await upsertProfile({
+          id: otpRes.data.user.id,
+          email: otpRes.data.user.email || '',
+          user_metadata: otpRes.data.user.user_metadata,
+        });
         return NextResponse.redirect(`${origin}${next}`);
       }
-      console.warn('[Auth Callback] Token hash verification error:', otpRes.error.message);
+      if (otpRes.error) console.warn('[Auth Callback] Token hash verification error:', otpRes.error.message);
     }
   } catch (err) {
     console.error('[Auth Callback Exception]', err);
