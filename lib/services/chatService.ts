@@ -104,7 +104,7 @@ export async function upsertProfile(supabaseUser: {
   const rawAvatar = (meta.avatar_url as string) || (meta.picture as string) || '';
   const avatar_url = getAvatarUrl(rawAvatar, finalUsername || display_name);
 
-  const { error } = await (supabase.from('profiles') as any).upsert(
+  let { error } = await (supabaseAdmin.from('profiles') as any).upsert(
     {
       id: supabaseUser.id,
       username: finalUsername,
@@ -117,10 +117,10 @@ export async function upsertProfile(supabaseUser: {
   );
 
   if (error) {
-    // Handle unique constraint violation on username cleanly
+    // Handle unique constraint violation on username cleanly with fallback
     if (error.message.includes('profiles_username_key') || error.code === '23505') {
       const fallbackUsername = `${baseUsername}_${Date.now().toString().slice(-5)}`;
-      await (supabase.from('profiles') as any).upsert(
+      await (supabaseAdmin.from('profiles') as any).upsert(
         {
           id: supabaseUser.id,
           username: fallbackUsername,

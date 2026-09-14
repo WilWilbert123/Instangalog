@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { supabase } from '@/lib/supabase/client';
 import { X, ShieldCheck, Mail, ArrowRight, Loader2, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 
 export function AuthModal() {
@@ -19,6 +20,40 @@ export function AuthModal() {
       closeAuthModal();
     }
   }, [user, showAuthModal, closeAuthModal]);
+
+  // Real-time session polling & multi-tab storage listener while waiting for magic link click
+  useEffect(() => {
+    if (!emailSent || !showAuthModal || user) return;
+
+    // 1. Poll Supabase session every 1.5s
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await useAuthStore.getState().initSession();
+        }
+      } catch {
+        // Ignore
+      }
+    }, 1500);
+
+    // 2. Listen to storage events across browser tabs
+    const handleStorageChange = async (e: StorageEvent) => {
+      if (e.key && e.key.includes('auth-token')) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await useAuthStore.getState().initSession();
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [emailSent, showAuthModal, user]);
 
   // Cooldown countdown timer for resending magic link
   useEffect(() => {
