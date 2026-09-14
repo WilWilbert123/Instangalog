@@ -21,15 +21,31 @@ export function AuthModal() {
     }
   }, [user, showAuthModal, closeAuthModal]);
 
-  // Real-time session polling & multi-tab storage listener while waiting for magic link click
+  // Real-time cross-device heartbeat polling while waiting for magic link click
   useEffect(() => {
-    if (!emailSent || !showAuthModal || user) return;
+    if (!emailSent || !showAuthModal || user || !emailInput) return;
 
-    // 1. Poll Supabase session every 1.5s
     const pollInterval = setInterval(async () => {
       try {
+        // 1. Cross-device API heartbeat poll
+        const res = await fetch(`/api/auth/poll-magic-link?email=${encodeURIComponent(emailInput.trim())}`);
+        if (res.ok) {
+          const pollData = await res.json();
+          if (pollData.verified) {
+            if (pollData.session?.access_token && pollData.session?.refresh_token) {
+              await supabase.auth.setSession({
+                access_token: pollData.session.access_token,
+                refresh_token: pollData.session.refresh_token,
+              });
+            }
+            await useAuthStore.getState().initSession();
+            return;
+          }
+        }
+
+        // 2. Local Supabase session check
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
+        if (session?.user && session.user.email?.toLowerCase() === emailInput.trim().toLowerCase()) {
           await useAuthStore.getState().initSession();
         }
       } catch {
@@ -37,7 +53,6 @@ export function AuthModal() {
       }
     }, 1500);
 
-    // 2. Listen to storage events across browser tabs
     const handleStorageChange = async (e: StorageEvent) => {
       if (e.key && e.key.includes('auth-token')) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -53,7 +68,7 @@ export function AuthModal() {
       clearInterval(pollInterval);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [emailSent, showAuthModal, user]);
+  }, [emailSent, showAuthModal, user, emailInput]);
 
   // Cooldown countdown timer for resending magic link
   useEffect(() => {

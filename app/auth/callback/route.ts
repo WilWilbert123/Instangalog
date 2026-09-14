@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClientServer } from '@/lib/supabase/server';
 import { upsertProfile } from '@/lib/services/chatService';
+import { setMagicLinkVerified } from '@/lib/auth/magicLinkStore';
 
 /**
  * /auth/callback
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const tokenHash = searchParams.get('token_hash');
   const type = searchParams.get('type') as any;
+  const emailParam = searchParams.get('email');
   const next = searchParams.get('next') ?? '/';
 
   try {
@@ -28,6 +30,18 @@ export async function GET(request: NextRequest) {
           email: data.user.email || '',
           user_metadata: data.user.user_metadata,
         });
+
+        const targetEmail = data.user.email || emailParam;
+        if (targetEmail) {
+          setMagicLinkVerified(
+            targetEmail,
+            data.user.id,
+            data.session
+              ? { access_token: data.session.access_token, refresh_token: data.session.refresh_token }
+              : undefined
+          );
+        }
+
         return NextResponse.redirect(`${origin}${next}`);
       }
       if (error) console.warn('[Auth Callback] Code exchange error:', error.message);
@@ -54,6 +68,18 @@ export async function GET(request: NextRequest) {
           email: otpRes.data.user.email || '',
           user_metadata: otpRes.data.user.user_metadata,
         });
+
+        const targetEmail = otpRes.data.user.email || emailParam;
+        if (targetEmail) {
+          setMagicLinkVerified(
+            targetEmail,
+            otpRes.data.user.id,
+            otpRes.data.session
+              ? { access_token: otpRes.data.session.access_token, refresh_token: otpRes.data.session.refresh_token }
+              : undefined
+          );
+        }
+
         return NextResponse.redirect(`${origin}${next}`);
       }
       if (otpRes.error) console.warn('[Auth Callback] Token hash verification error:', otpRes.error.message);

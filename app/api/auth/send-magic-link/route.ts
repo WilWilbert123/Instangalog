@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendMagicLinkEmail } from '@/lib/services/resendService';
+import { upsertProfile } from '@/lib/services/chatService';
+import { registerPendingMagicLink } from '@/lib/auth/magicLinkStore';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,10 +20,47 @@ export async function POST(req: NextRequest) {
     const origin = req.headers.get('origin') || (host ? `${protocol}://${host}` : null) || process.env.NEXT_PUBLIC_APP_URL || 'https://instangalogpagpag.vercel.app';
     const redirectTo = `${origin}/auth/callback`;
 
-    // Check if Resend API key is configured
+    // 1. Ensure user account exists in auth.users & public.profiles
+    let targetUser = null;
+    try {
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+    } catch (err) {
+      console.warn('[Send Magic Link] List users warning:', err);
+    }
+
+    if (!targetUser) {
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        email_confirm: true,
+        user_metadata: {
+          full_name: cleanEmail.split('@')[0],
+        },
+      });
+
+      if (createError) {
+        console.warn('[Send Magic Link] Create user warning:', createError.message);
+      } else if (newUser?.user) {
+        targetUser = newUser.user;
+      }
+    }
+
+    if (targetUser) {
+      // Ensure profile exists in public.profiles table immediately
+      await upsertProfile({
+        id: targetUser.id,
+        email: cleanEmail,
+        user_metadata: targetUser.user_metadata,
+      });
+
+      // Register pending link for real-time heartbeat sync
+      registerPendingMagicLink(cleanEmail, targetUser.id);
+    }
+
+    // 2. Generate link & send via Resend API
     if (process.env.RESEND_API_KEY) {
       try {
-        const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+        let { data, error } = await supabaseAdmin.auth.admin.generateLink({
           type: 'magiclink',
           email: cleanEmail,
           options: {
@@ -32,10 +71,10 @@ export async function POST(req: NextRequest) {
         if (error) {
           console.warn('[Admin GenerateLink Error]', error.message);
         } else if (data?.properties) {
-          // Construct direct, robust token_hash link to app callback endpoint
+          // Construct direct, robust token_hash link with email parameter
           let magicLinkUrl = data.properties.action_link;
           if (data.properties.hashed_token) {
-            magicLinkUrl = `${origin}/auth/callback?token_hash=${data.properties.hashed_token}&type=magiclink`;
+            magicLinkUrl = `${origin}/auth/callback?token_hash=${data.properties.hashed_token}&type=magiclink&email=${encodeURIComponent(cleanEmail)}`;
           }
 
           const resendResult = await sendMagicLinkEmail({
