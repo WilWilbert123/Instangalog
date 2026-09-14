@@ -52,9 +52,10 @@ export async function upsertProfile(supabaseUser: {
   email: string;
   user_metadata?: Record<string, unknown>;
 }) {
+  if (!supabaseUser?.id) return;
+
   // Check if profile row already exists in Supabase to preserve custom user edits
-  const { data: existing } = await supabase
-    .from('profiles')
+  const { data: existing } = await (supabaseAdmin.from('profiles') as any)
     .select('id')
     .eq('id', supabaseUser.id)
     .maybeSingle();
@@ -65,25 +66,26 @@ export async function upsertProfile(supabaseUser: {
 
   const meta = supabaseUser.user_metadata ?? {};
   const ADMIN_EMAIL = 'johnwilbertgamis2022@gmail.com';
-  const isAdmin = supabaseUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const cleanEmail = (supabaseUser.email || '').toLowerCase();
+  const isAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase();
 
   let baseUsername =
     isAdmin
       ? 'johnwilbert'
       : ((meta.preferred_username as string) ||
          (meta.user_name as string) ||
-         supabaseUser.email.split('@')[0]
+         cleanEmail.split('@')[0] ||
+         `user_${supabaseUser.id.slice(0, 6)}`
         ).replace(/[^a-z0-9_]/gi, '_').toLowerCase();
 
-  if (!baseUsername) {
+  if (!baseUsername || baseUsername === '_') {
     baseUsername = `user_${supabaseUser.id.slice(0, 6)}`;
   }
 
   // Ensure username is unique before attempting insert
   let finalUsername = baseUsername;
   try {
-    const { data: usernameConflict } = await supabase
-      .from('profiles')
+    const { data: usernameConflict } = await (supabaseAdmin.from('profiles') as any)
       .select('id')
       .eq('username', finalUsername)
       .neq('id', supabaseUser.id)

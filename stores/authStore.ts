@@ -90,6 +90,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const cleanEmail = email.trim().toLowerCase();
 
     try {
+      // Clear any previous stale session if logging in with a different email
+      const { data: currentSessionData } = await supabase.auth.getSession();
+      if (currentSessionData?.session?.user?.email?.toLowerCase() !== cleanEmail) {
+        await supabase.auth.signOut();
+      }
+
       const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'https://instangalogpagpag.vercel.app');
       const redirectTo = `${origin}/auth/callback`;
 
