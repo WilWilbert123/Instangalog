@@ -308,15 +308,27 @@ export function subscribeToGlobalChat(
 
       onTypingStatusChange(getTypingList());
     })
-    // 3. Presence sync → online user count
+    // 3. Presence sync → realtime online user count
     .on('presence', { event: 'sync' }, () => {
-      const count = Object.keys(channel.presenceState()).length;
+      const state = channel.presenceState();
+      const count = Object.keys(state).length;
+      onPresenceChange(Math.max(count, 1));
+    })
+    .on('presence', { event: 'join' }, () => {
+      const state = channel.presenceState();
+      const count = Object.keys(state).length;
+      onPresenceChange(Math.max(count, 1));
+    })
+    .on('presence', { event: 'leave' }, () => {
+      const state = channel.presenceState();
+      const count = Object.keys(state).length;
       onPresenceChange(Math.max(count, 1));
     })
     .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED' && currentUser) {
+      if (status === 'SUBSCRIBED') {
         await channel.track({
-          user_id: currentUser.id,
+          user_id: currentUser?.id || presenceKey,
+          display_name: currentUser?.display_name || 'Guest',
           online_at: new Date().toISOString(),
         });
       }

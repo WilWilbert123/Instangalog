@@ -111,7 +111,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   };
 
   return (
-    <div className="relative w-full h-[calc(100dvh-11.5rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
+    <div className="relative w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
       {/* Video Element or YouTube iframe or Error Poster Fallback */}
       {isYouTube ? (
         <div className="relative w-full h-full bg-black flex items-center justify-center">
@@ -167,11 +167,11 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         </div>
       )}
 
-      {/* Mute/Sound Control for native HTML5 video (YouTube has native controls top right) */}
-      {!isYouTube && !hasVideoError && (
+      {/* Persistent Floating Sound Toggle */}
+      {!hasVideoError && (
         <button
           onClick={toggleMute}
-          className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 hover:bg-black/90 transition-all z-30 shadow-lg active:scale-95"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-all z-30 shadow-xl active:scale-95 flex items-center justify-center"
           aria-label={isMuted ? 'Unmute video' : 'Mute video'}
           title={isMuted ? 'Click to unmute' : 'Click to mute'}
         >
@@ -202,11 +202,10 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
           </Link>
           <button
             onClick={handleFollow}
-            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
-              isFollowing
-                ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                : 'bg-white text-black hover:bg-slate-200 shadow-md'
-            }`}
+            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${isFollowing
+              ? 'bg-slate-800 text-slate-300 border border-slate-700'
+              : 'bg-white text-black hover:bg-slate-200 shadow-md'
+              }`}
           >
             {isFollowing ? 'Following' : 'Follow'}
           </button>
@@ -239,11 +238,10 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         <div className="flex flex-col items-center gap-0.5 sm:gap-1 group/like">
           <button
             onClick={handleLike}
-            className={`p-2 sm:p-3.5 rounded-full backdrop-blur-md border shadow-xl transition-all active:scale-125 ${
-              isLiked
-                ? 'bg-red-600 text-white border-red-500 shadow-red-500/50'
-                : 'bg-slate-900/80 text-white border-white/20 hover:bg-black'
-            }`}
+            className={`p-2 sm:p-3.5 rounded-full backdrop-blur-md border shadow-xl transition-all active:scale-125 ${isLiked
+              ? 'bg-red-600 text-white border-red-500 shadow-red-500/50'
+              : 'bg-slate-900/80 text-white border-white/20 hover:bg-black'
+              }`}
             aria-label="Like post"
           >
             <Heart className={`w-4 h-4 sm:w-6 sm:h-6 ${isLiked ? 'fill-white text-white' : 'text-white'}`} />

@@ -26,8 +26,9 @@ export function InstallAppBanner() {
       <div className="fixed top-16 left-4 right-4 md:left-auto md:right-6 md:max-w-sm z-40 p-4 rounded-2xl glass-card border border-slate-300 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white shadow-2xl animate-in slide-in-from-top-4 duration-300">
         <div className="flex items-start justify-between gap-3">
           <div className="flex gap-3">
-            <div className="w-10 h-10 rounded-xl bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shrink-0 shadow-md">
-              {isIOS ? <Smartphone className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shrink-0 shadow-md">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/pagpag.png" alt="Pagpag App Icon" className="w-full h-full object-contain" />
             </div>
             <div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-white">Get Instangalog App</h4>

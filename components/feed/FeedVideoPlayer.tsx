@@ -48,7 +48,7 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
     if (isVisible) {
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+        playPromise.catch(() => { });
       }
     } else {
       videoRef.current.pause();
@@ -73,30 +73,30 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
           title={caption || 'YouTube Video'}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
-          className="w-full h-full border-0"
+          className="w-full h-full border-0 pointer-events-auto"
         />
       ) : (
-        <>
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            poster={thumbnailUrl}
-            controls
-            muted={isMuted}
-            loop
-            playsInline
-            className="w-full h-full object-cover"
-          />
-          <button
-            onClick={toggleMute}
-            className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 p-1.5 sm:p-2 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 hover:bg-black/90 transition-all z-20 shadow-lg active:scale-95"
-            aria-label={isMuted ? 'Unmute video' : 'Mute video'}
-            title={isMuted ? 'Click to unmute' : 'Click to mute'}
-          >
-            {isMuted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />}
-          </button>
-        </>
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          poster={thumbnailUrl}
+          controls
+          muted={isMuted}
+          loop
+          playsInline
+          className="w-full h-full object-cover"
+        />
       )}
+
+      {/* Persistent Floating Sound Toggle */}
+      <button
+        onClick={toggleMute}
+        className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-all z-30 shadow-xl active:scale-95 flex items-center justify-center"
+        aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+        title={isMuted ? 'Click to unmute' : 'Click to mute'}
+      >
+        {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+      </button>
     </div>
   );
 }

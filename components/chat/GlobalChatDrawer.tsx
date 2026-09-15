@@ -19,9 +19,9 @@ interface GlobalChatDrawerProps {
 }
 
 function cleanDisplayName(name: string): string {
-  const clean = name.replace(/\s*\([^)]*\)/g, '').trim();
-  const firstWord = clean.split(' ')[0];
-  return firstWord || clean || 'Someone';
+  if (!name) return 'Someone';
+  // Strip trailing email parts or parenthetical roles if any
+  return name.replace(/\s*\([^)]*\)/g, '').trim() || name;
 }
 
 function formatTypingStatus(users: TypingUser[]): { text: string; primaryUser?: TypingUser } {
