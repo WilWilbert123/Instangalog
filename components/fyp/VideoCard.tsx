@@ -167,14 +167,15 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         </div>
       )}
 
-      {/* Mute Control for native HTML5 video */}
-      {!isYouTube && !hasVideoError && (
+      {/* Mute/Sound Control for all videos (Native & YouTube) */}
+      {!hasVideoError && (
         <button
           onClick={toggleMute}
-          className="absolute top-4 right-4 p-2.5 rounded-full bg-slate-900/70 backdrop-blur-md text-white border border-white/10 hover:bg-slate-800 transition-colors z-20"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 hover:bg-black/90 transition-all z-30 shadow-lg active:scale-95"
           aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+          title={isMuted ? 'Click to unmute' : 'Click to mute'}
         >
-          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          {isMuted ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
         </button>
       )}
 

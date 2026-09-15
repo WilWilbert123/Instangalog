@@ -180,6 +180,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
    * Real Google OAuth via Supabase — redirects to actual Google account picker.
    */
   loginWithGoogle: async () => {
+    // Clear any active session first so switching Google accounts creates/logs into the selected account properly
+    await supabase.auth.signOut();
+
     const redirectTo =
       typeof window !== 'undefined'
         ? `${window.location.origin}/auth/callback`

@@ -435,6 +435,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                         )}
                       </h4>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">@{author.username}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 font-mono mt-0.5">
+                        <Calendar className="w-2.5 h-2.5" />
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </p>
                     </div>
                   </Link>
 
@@ -533,11 +537,6 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                       <Flag className="w-3.5 h-3.5" />
                     </button>
                   </div>
-
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(post.created_at).toLocaleDateString()}
-                  </span>
                 </div>
               </div>
             );
