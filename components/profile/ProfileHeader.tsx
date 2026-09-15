@@ -61,14 +61,14 @@ export function ProfileHeader({ initialProfile }: ProfileHeaderProps) {
     }
   }, [profile.id, isOwnProfile]);
 
-  // Check initial follow state and pending uploads count
+  // Check initial follow state and pending uploads count (private to profile owner only)
   React.useEffect(() => {
     if (user && profile.id && !isOwnProfile) {
       checkIsFollowing(user.id, profile.id).then((following) => {
         setIsFollowing(following);
       });
     }
-    if (profile.id) {
+    if (profile.id && isOwnProfile) {
       getUserPendingPosts(profile.id).then((posts) => {
         setPendingCount(posts.length);
       });
@@ -167,11 +167,11 @@ export function ProfileHeader({ initialProfile }: ProfileHeaderProps) {
                   </button>
                 )}
 
-                {pendingCount > 0 && (
+                {isOwnProfile && pendingCount > 0 && (
                   <button
                     onClick={() => setIsPendingModalOpen(true)}
                     className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all active:scale-95 shadow-sm"
-                    title="View pending uploads"
+                    title="View your pending uploads"
                   >
                     <Clock className="w-4 h-4" />
                     <span>Pending</span>
