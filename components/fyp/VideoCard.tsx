@@ -167,8 +167,8 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         </div>
       )}
 
-      {/* Mute/Sound Control for all videos (Native & YouTube) */}
-      {!hasVideoError && (
+      {/* Mute/Sound Control for native HTML5 video (YouTube has native controls top right) */}
+      {!isYouTube && !hasVideoError && (
         <button
           onClick={toggleMute}
           className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 hover:bg-black/90 transition-all z-30 shadow-lg active:scale-95"
