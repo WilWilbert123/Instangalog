@@ -132,21 +132,25 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
       {/* Chat Header */}
       <div className="px-6 py-4 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shadow-md">
-            <Sparkles className="w-5 h-5 fill-current" />
+          <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-md shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              Global Community Chat
+              Global chat
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">WebSocket Realtime Sync • Active Presence</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Tangalog Bisayawa</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm">
-          <Users className="w-3.5 h-3.5 text-emerald-500" />
-          <span>{onlineCount} Online Now</span>
+        <div className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm" title={`${onlineCount} Online Now`}>
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <span>{onlineCount}</span>
         </div>
       </div>
 

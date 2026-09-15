@@ -44,10 +44,11 @@ export function DesktopSidebar() {
   return (
     <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-4 justify-between z-30 transition-colors duration-200">
       <div className="space-y-6">
-        {/* Brand Header (Monochrome Black & White) */}
+        {/* Brand Header */}
         <Link href="/" className="flex items-center gap-3 px-2 py-1">
-          <div className="w-10 h-10 rounded-xl bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shadow-md">
-            <Sparkles className="w-5 h-5 fill-current" />
+          <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-md shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">

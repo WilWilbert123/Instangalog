@@ -137,8 +137,9 @@ export function AuthModal() {
 
         {/* Brand Logo & Header */}
         <div className="flex flex-col items-center text-center mt-2 mb-6">
-          <div className="w-14 h-14 mb-3 rounded-2xl bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shadow-lg">
-            <ShieldCheck className="w-8 h-8" />
+          <div className="w-16 h-16 mb-3 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-2 shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Sign In to Instangalog
