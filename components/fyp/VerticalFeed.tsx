@@ -44,10 +44,10 @@ export function VerticalFeed({ posts }: VerticalFeedProps) {
     <>
       <div
         ref={containerRef}
-        className="fyp-feed-container w-full h-[calc(100dvh-11.5rem)] md:h-[calc(100vh-5rem)] overflow-y-auto snap-y snap-mandatory hide-scrollbar"
+        className="fyp-feed-container w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] overflow-y-auto snap-y snap-mandatory hide-scrollbar"
       >
         {posts.map((post, idx) => (
-          <div key={post.id} className="fyp-slide w-full h-[calc(100dvh-11.5rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center p-1 sm:p-2">
+          <div key={post.id} className="fyp-slide w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] flex items-center justify-center p-1 sm:p-2">
             <VideoCard
               post={post}
               isActive={idx === activeIndex}
