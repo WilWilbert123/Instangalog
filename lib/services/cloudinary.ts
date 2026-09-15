@@ -195,3 +195,79 @@ export async function uploadImageToCloudinary(
 
   throw lastError || new Error('All configured Cloudinary accounts in pool failed.');
 }
+
+/**
+ * Uploads media (image, video, audio) directly to Cloudinary with automatic failover
+ */
+export async function uploadMediaToCloudinary(
+  file: File,
+  resourceType: 'image' | 'video' | 'auto' = 'auto',
+  onProgress?: (progressPercent: number) => void
+): Promise<{ url: string; thumbnailUrl?: string; duration?: number; accountUsed?: string }> {
+  const pool = getCloudinaryAccountPool();
+
+  if (pool.length === 0) {
+    if (onProgress) onProgress(100);
+    const objectUrl = URL.createObjectURL(file);
+    return { url: objectUrl };
+  }
+
+  const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
+  let lastError: Error | null = null;
+
+  for (const account of shuffledPool) {
+    try {
+      const result = await new Promise<{ url: string; thumbnailUrl?: string; duration?: number; accountUsed?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', account.uploadPreset);
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable && onProgress) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress(percent);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const data = JSON.parse(xhr.responseText);
+            const url = data.secure_url || data.url;
+            let thumbnailUrl = data.secure_url;
+            if (resourceType === 'video' || file.type.startsWith('video/')) {
+              thumbnailUrl = (data.secure_url || data.url).replace(/\.[^/.]+$/, '.jpg');
+            }
+            resolve({
+              url,
+              thumbnailUrl,
+              duration: data.duration,
+              accountUsed: account.cloudName,
+            });
+          } else {
+            try {
+              const errData = JSON.parse(xhr.responseText);
+              reject(new Error(errData.error?.message || `Quota/Upload error on account (${account.cloudName})`));
+            } catch {
+              reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
+            }
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
+        xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
+
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${account.cloudName}/${resourceType}/upload`);
+        xhr.send(formData);
+      });
+
+      return result;
+    } catch (err: any) {
+      console.warn(`Cloudinary account (${account.cloudName}) failed:`, err.message);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All configured Cloudinary accounts in pool failed or reached their quota limit.');
+}
+
