@@ -252,33 +252,33 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
           })
         )}
 
-        {/* Live WebSocket Typing Indicator */}
-        {typingUsers.length > 0 && typingInfo.primaryUser && (
-          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-emerald-500/20 dark:border-emerald-500/15 shadow-sm backdrop-blur-sm w-fit transition-all duration-300 my-1">
-            <div className="w-6 h-6 rounded-full overflow-hidden border-2 border-emerald-500/40 bg-slate-100 dark:bg-slate-800 shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={getCartoonAvatar(typingInfo.primaryUser.displayName)}
-                alt="Typing..."
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {typingInfo.text}
-            </span>
-
-            {/* Animated bouncing dots */}
-            <div className="flex items-center gap-[3px] pl-0.5">
-              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.32s] [animation-duration:0.6s]" />
-              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.16s] [animation-duration:0.6s]" />
-              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-duration:0.6s]" />
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Live WebSocket Typing Indicator - placed right above input box */}
+      {typingUsers.length > 0 && typingInfo.primaryUser && (
+        <div className="px-4 py-1.5 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/50 flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full overflow-hidden border border-emerald-500/40 bg-slate-100 dark:bg-slate-800 shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={getCartoonAvatar(typingInfo.primaryUser.displayName)}
+              alt="Typing..."
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            {typingInfo.text}
+          </span>
+
+          {/* Animated bouncing dots */}
+          <div className="flex items-center gap-[2px]">
+            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.32s] [animation-duration:0.6s]" />
+            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.16s] [animation-duration:0.6s]" />
+            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce [animation-duration:0.6s]" />
+          </div>
+        </div>
+      )}
 
       {/* Rate limit error banner */}
       {sendError && (
