@@ -88,15 +88,7 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
         />
       )}
 
-      {/* Persistent Floating Sound Toggle */}
-      <button
-        onClick={toggleMute}
-        className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-all z-30 shadow-xl active:scale-95 flex items-center justify-center"
-        aria-label={isMuted ? 'Unmute video' : 'Mute video'}
-        title={isMuted ? 'Click to unmute' : 'Click to mute'}
-      >
-        {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
-      </button>
+
     </div>
   );
 }

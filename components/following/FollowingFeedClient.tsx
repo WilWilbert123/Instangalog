@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Post, PostType } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { createPost, togglePostLike } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { uploadMediaToCloudinary } from '@/lib/services/cloudinary';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { MusicCard } from '@/components/music/MusicCard';
 import { FeedVideoPlayer } from '@/components/feed/FeedVideoPlayer';
@@ -31,6 +32,8 @@ import {
   Calendar,
   Grid,
   Flag,
+  Upload,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -52,9 +55,12 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   const [caption, setCaption] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [hashtags, setHashtags] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessNotice, setShowSuccessNotice] = useState(false);
   const [lastSubmittedType, setLastSubmittedType] = useState<PostType>('status');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active Comment Drawer & Report Modal
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -100,6 +106,29 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+
+    if (file.size > MAX_VIDEO_SIZE) {
+      alert('The video MB are too big, make it less than 100MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setSelectedFile(file);
+    setMediaUrl(''); // Clear URL if local file is selected
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleQuickPublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -107,8 +136,8 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
       return;
     }
 
-    if (!caption.trim() && !mediaUrl.trim()) {
-      alert('Please write a caption or provide a media URL.');
+    if (!caption.trim() && !mediaUrl.trim() && !selectedFile) {
+      alert('Please write a caption or provide a media file/URL.');
       return;
     }
 
@@ -116,18 +145,33 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
     setLastSubmittedType(postType);
     let finalMediaUrl = mediaUrl.trim();
     let finalThumbnailUrl = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80';
-
-    if (postType === 'video' && finalMediaUrl) {
-      const yt = parseYouTubeUrl(finalMediaUrl);
-      if (yt.isYouTube && yt.embedUrl) {
-        finalMediaUrl = yt.embedUrl;
-        if (yt.thumbnailUrl) {
-          finalThumbnailUrl = yt.thumbnailUrl;
-        }
-      }
-    }
+    let mediaDuration = 15;
 
     try {
+      if (selectedFile) {
+        setUploadProgress(0);
+        const resourceType = postType === 'video' ? 'video' : postType === 'image' ? 'image' : 'auto';
+        const uploadRes = await uploadMediaToCloudinary(selectedFile, resourceType, (progress) => {
+          setUploadProgress(progress);
+        });
+
+        finalMediaUrl = uploadRes.url;
+        if (uploadRes.thumbnailUrl) {
+          finalThumbnailUrl = uploadRes.thumbnailUrl;
+        }
+        if (uploadRes.duration) {
+          mediaDuration = Math.round(uploadRes.duration);
+        }
+      } else if (postType === 'video' && finalMediaUrl) {
+        const yt = parseYouTubeUrl(finalMediaUrl);
+        if (yt.isYouTube && yt.embedUrl) {
+          finalMediaUrl = yt.embedUrl;
+          if (yt.thumbnailUrl) {
+            finalThumbnailUrl = yt.thumbnailUrl;
+          }
+        }
+      }
+
       const hashtagList = hashtags
         .split(',')
         .map((t) => t.trim().replace(/^#/, ''))
@@ -157,7 +201,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             ? {
                 video_url: finalMediaUrl,
                 thumbnail_url: finalThumbnailUrl,
-                duration: 15,
+                duration: mediaDuration,
               }
             : undefined,
         image:
@@ -173,10 +217,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                 return {
                   audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
                   cover_url: yt.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
-                  title: caption.trim() || 'New Track',
+                  title: caption.trim() || selectedFile?.name || 'New Track',
                   artist: user.display_name,
                   genre: 'Music Audio',
-                  duration: 180,
+                  duration: mediaDuration || 180,
                 };
               })()
             : undefined,
@@ -195,6 +239,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
         setCaption('');
         setMediaUrl('');
         setHashtags('');
+        clearSelectedFile();
         setShowSuccessNotice(true);
         setTimeout(() => setShowSuccessNotice(false), 7000);
       }
@@ -202,6 +247,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
       alert(err?.message || 'Error creating post.');
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -258,7 +304,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             className="px-4 py-2 text-xs font-bold rounded-xl bg-black text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1.5 shrink-0"
           >
             {isSubmitting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {uploadProgress !== null && <span>{uploadProgress}%</span>}
+              </>
             ) : (
               <>
                 <Send className="w-3.5 h-3.5" />
@@ -279,7 +328,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             <button
               key={type}
               type="button"
-              onClick={() => setPostType(type as PostType)}
+              onClick={() => {
+                setPostType(type as PostType);
+                clearSelectedFile();
+              }}
               className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 postType === type
                   ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
@@ -310,21 +362,70 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
           />
 
           {postType !== 'status' && (
-            <input
-              type="url"
-              value={mediaUrl}
-              onChange={(e) => setMediaUrl(e.target.value)}
-              placeholder={
-                postType === 'video'
-                  ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Video URL'
-                  : postType === 'music'
-                  ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Audio URL'
-                  : 'Paste Direct Image URL'
-              }
-              className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
-            />
+            <div className="space-y-2">
+              {/* File Upload Button & Status */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={
+                  postType === 'video'
+                    ? 'video/*'
+                    : postType === 'image'
+                    ? 'image/*'
+                    : 'audio/*,video/*'
+                }
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-200/80 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors flex items-center gap-2 shrink-0 border border-slate-300/50 dark:border-slate-700/50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload from Device</span>
+                </button>
+
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">or paste URL below</span>
+              </div>
+
+              {selectedFile && (
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs">
+                  <div className="flex items-center gap-2 truncate">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="truncate font-medium">{selectedFile.name} ({(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearSelectedFile}
+                    className="p-1 rounded-md hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-300 shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {!selectedFile && (
+                <input
+                  type="url"
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  placeholder={
+                    postType === 'video'
+                      ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Video URL'
+                      : postType === 'music'
+                      ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Audio URL'
+                      : 'Paste Direct Image URL'
+                  }
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
+                />
+              )}
+            </div>
           )}
         </div>
+
 
         {showSuccessNotice && (
           lastSubmittedType === 'video' ? (

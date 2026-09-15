@@ -167,17 +167,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         </div>
       )}
 
-      {/* Persistent Floating Sound Toggle */}
-      {!hasVideoError && (
-        <button
-          onClick={toggleMute}
-          className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-all z-30 shadow-xl active:scale-95 flex items-center justify-center"
-          aria-label={isMuted ? 'Unmute video' : 'Mute video'}
-          title={isMuted ? 'Click to unmute' : 'Click to mute'}
-        >
-          {isMuted ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
-        </button>
-      )}
+
 
       {/* Bottom Creator Info & Caption Overlay */}
       <div className="absolute bottom-0 left-0 right-16 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10 space-y-3 pointer-events-none">
