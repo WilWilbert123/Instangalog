@@ -233,27 +233,27 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       </div>
 
       {/* Right Side Action Drawer (Like Box for YouTube & Direct Videos) */}
-      <div className="absolute right-3 bottom-8 z-30 flex flex-col items-center gap-5 pointer-events-auto">
+      <div className="absolute right-2 sm:right-3 bottom-4 sm:bottom-8 z-30 flex flex-col items-center gap-3 sm:gap-5 pointer-events-auto">
         {/* Like Box */}
-        <div className="flex flex-col items-center gap-1 group/like">
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1 group/like">
           <button
             onClick={handleLike}
-            className={`p-3.5 rounded-full backdrop-blur-md border shadow-xl transition-all active:scale-125 ${
+            className={`p-2 sm:p-3.5 rounded-full backdrop-blur-md border shadow-xl transition-all active:scale-125 ${
               isLiked
                 ? 'bg-red-600 text-white border-red-500 shadow-red-500/50'
                 : 'bg-slate-900/80 text-white border-white/20 hover:bg-black'
             }`}
             aria-label="Like post"
           >
-            <Heart className={`w-6 h-6 ${isLiked ? 'fill-white text-white' : 'text-white'}`} />
+            <Heart className={`w-4 h-4 sm:w-6 sm:h-6 ${isLiked ? 'fill-white text-white' : 'text-white'}`} />
           </button>
-          <span className="text-xs font-black text-white drop-shadow-md bg-black/60 px-2 py-0.5 rounded-full border border-white/10">
+          <span className="text-[9px] sm:text-xs font-black text-white drop-shadow-md bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full border border-white/10">
             {likesCount.toLocaleString()}
           </span>
         </div>
 
         {/* Comment Button */}
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -263,51 +263,51 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
               }
               onOpenComments(post.id);
             }}
-            className="p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-colors shadow-lg"
+            className="p-2 sm:p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-colors shadow-lg"
             aria-label="View comments"
           >
-            <MessageCircle className="w-6 h-6" />
+            <MessageCircle className="w-4 h-4 sm:w-6 sm:h-6" />
           </button>
-          <span className="text-xs font-black text-white drop-shadow-md bg-black/60 px-2 py-0.5 rounded-full border border-white/10">
+          <span className="text-[9px] sm:text-xs font-black text-white drop-shadow-md bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full border border-white/10">
             {post.comments_count.toLocaleString()}
           </span>
         </div>
 
         {/* Share Button */}
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1">
           <button
             onClick={handleShare}
-            className="p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-colors shadow-lg"
+            className="p-2 sm:p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-colors shadow-lg"
             aria-label="Share video"
           >
-            <Share2 className="w-6 h-6" />
+            <Share2 className="w-4 h-4 sm:w-6 sm:h-6" />
           </button>
-          <span className="text-xs font-black text-white drop-shadow-md bg-black/60 px-2 py-0.5 rounded-full border border-white/10">
+          <span className="text-[9px] sm:text-xs font-black text-white drop-shadow-md bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full border border-white/10">
             {post.shares_count.toLocaleString()}
           </span>
         </div>
 
         {/* Report Button */}
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowReportModal(true);
             }}
-            className="p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-rose-600 transition-colors shadow-lg"
+            className="p-2 sm:p-3.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-rose-600 transition-colors shadow-lg"
             aria-label="Report video"
             title="Report Video"
           >
-            <Flag className="w-5 h-5" />
+            <Flag className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* View Count */}
-        <div className="flex flex-col items-center gap-1 opacity-80">
-          <div className="p-2.5 rounded-full bg-slate-900/60 text-slate-300 border border-white/10">
-            <Eye className="w-4 h-4" />
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1 opacity-80">
+          <div className="p-1.5 sm:p-2.5 rounded-full bg-slate-900/60 text-slate-300 border border-white/10">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
           </div>
-          <span className="text-[10px] font-bold text-white drop-shadow-md">{post.views_count.toLocaleString()}</span>
+          <span className="text-[9px] sm:text-[10px] font-bold text-white drop-shadow-md">{post.views_count.toLocaleString()}</span>
         </div>
       </div>
 
