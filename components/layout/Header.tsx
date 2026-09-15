@@ -67,8 +67,9 @@ export function Header() {
     <header className="sticky top-0 z-30 w-full h-16 glass-header border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white px-4 flex items-center justify-between gap-4 transition-colors duration-200">
       {/* Mobile Brand Logo */}
       <Link href="/" className="md:hidden flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shadow-md">
-          <Sparkles className="w-4 h-4 fill-current" />
+        <div className="w-11 h-11 rounded-xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-sm shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />
         </div>
         <span className="font-bold text-lg text-slate-900 dark:text-white">
           Instangalog
