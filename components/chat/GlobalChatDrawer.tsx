@@ -48,18 +48,6 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Stabilise user identity across renders to avoid subscription churn
-  const userIdRef = useRef<string | null>(null);
-  const userDisplayRef = useRef<string | null>(null);
-
-  // Track user identity changes (only re-subscribe when user *actually* changes)
-  const userChanged =
-    user?.id !== userIdRef.current || user?.display_name !== userDisplayRef.current;
-
-  useEffect(() => {
-    userIdRef.current = user?.id ?? null;
-    userDisplayRef.current = user?.display_name ?? null;
-  }, [user?.id, user?.display_name]);
 
   useEffect(() => {
     // 1. Fetch initial message history
