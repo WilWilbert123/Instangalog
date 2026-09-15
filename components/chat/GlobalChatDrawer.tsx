@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChatMessage } from '@/types/chat';
 import {
   getGlobalChatMessages,
@@ -45,16 +45,33 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
   const [inputText, setInputText] = useState('');
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stabilise user identity across renders to avoid subscription churn
+  const userIdRef = useRef<string | null>(null);
+  const userDisplayRef = useRef<string | null>(null);
+
+  // Track user identity changes (only re-subscribe when user *actually* changes)
+  const userChanged =
+    user?.id !== userIdRef.current || user?.display_name !== userDisplayRef.current;
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+    userDisplayRef.current = user?.display_name ?? null;
+  }, [user?.id, user?.display_name]);
 
   useEffect(() => {
     // 1. Fetch initial message history
     getGlobalChatMessages().then(setMessages);
 
     // 2. Subscribe to Supabase Realtime WebSockets
+    const currentUserPayload = user
+      ? { id: user.id, display_name: user.display_name }
+      : null;
+
     const unsubscribe = subscribeToGlobalChat(
-      user ? { id: user.id, display_name: user.display_name } : null,
+      currentUserPayload,
       (newMsg) => {
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMsg.id)) return prev;
@@ -62,10 +79,10 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
         });
       },
       (typingList) => {
+        // Filter out self from typing indicators (belt-and-suspenders)
         setTypingUsers(
           typingList.filter((item) => {
             if (user?.id && item.userId === user.id) return false;
-            if (user?.display_name && item.displayName === user.display_name) return false;
             return true;
           })
         );
@@ -78,30 +95,43 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
     return () => {
       unsubscribe();
     };
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.display_name]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typingUsers]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    setInputText(text);
-
-    if (user) {
-      if (text.trim().length > 0) {
-        sendTypingBroadcast({ id: user.id, display_name: user.display_name }, true);
-
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          sendTypingBroadcast({ id: user.id, display_name: user.display_name }, false);
-        }, 2500);
-      } else {
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        sendTypingBroadcast({ id: user.id, display_name: user.display_name }, false);
-      }
+  // Clear error after a few seconds
+  useEffect(() => {
+    if (sendError) {
+      const t = setTimeout(() => setSendError(null), 4000);
+      return () => clearTimeout(t);
     }
-  };
+  }, [sendError]);
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const text = e.target.value;
+      setInputText(text);
+
+      if (user) {
+        if (text.trim().length > 0) {
+          sendTypingBroadcast({ id: user.id, display_name: user.display_name }, true);
+
+          // Stop-typing after user pauses for 3 seconds
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => {
+            sendTypingBroadcast({ id: user.id, display_name: user.display_name }, false);
+          }, 3000);
+        } else {
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          sendTypingBroadcast({ id: user.id, display_name: user.display_name }, false);
+        }
+      }
+    },
+    [user]
+  );
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,17 +141,23 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
     }
     if (!inputText.trim()) return;
 
+    // Immediately stop typing indicator
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTypingBroadcast({ id: user.id, display_name: user.display_name }, false);
 
-    const sent = await sendChatMessage(user.id, inputText);
-    if (sent) {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === sent.id)) return prev;
-        return [...prev, sent];
-      });
+    try {
+      const sent = await sendChatMessage(user.id, inputText);
+      if (sent) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === sent.id)) return prev;
+          return [...prev, sent];
+        });
+      }
+      setInputText('');
+      setSendError(null);
+    } catch (err: any) {
+      setSendError(err?.message || 'Failed to send message');
     }
-    setInputText('');
   };
 
   const typingInfo = formatTypingStatus(typingUsers);
@@ -230,8 +266,8 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
 
         {/* Live WebSocket Typing Indicator */}
         {typingUsers.length > 0 && typingInfo.primaryUser && (
-          <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-sm backdrop-blur-sm w-fit transition-all duration-300 my-1 animate-pulse">
-            <div className="w-5 h-5 rounded-full overflow-hidden border border-emerald-500/50 bg-slate-100 dark:bg-slate-800 shrink-0">
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-emerald-500/20 dark:border-emerald-500/15 shadow-sm backdrop-blur-sm w-fit transition-all duration-300 my-1">
+            <div className="w-6 h-6 rounded-full overflow-hidden border-2 border-emerald-500/40 bg-slate-100 dark:bg-slate-800 shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={getCartoonAvatar(typingInfo.primaryUser.displayName)}
@@ -244,16 +280,24 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
               {typingInfo.text}
             </span>
 
-            <div className="flex items-center gap-1 pl-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.32s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.16s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" />
+            {/* Animated bouncing dots */}
+            <div className="flex items-center gap-[3px] pl-0.5">
+              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.32s] [animation-duration:0.6s]" />
+              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.16s] [animation-duration:0.6s]" />
+              <span className="w-[5px] h-[5px] rounded-full bg-emerald-500 animate-bounce [animation-duration:0.6s]" />
             </div>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Rate limit error banner */}
+      {sendError && (
+        <div className="px-4 py-2 bg-rose-500/10 border-t border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium text-center">
+          {sendError}
+        </div>
+      )}
 
       {/* Input Footer */}
       <form onSubmit={handleSend} className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-3">
@@ -279,4 +323,3 @@ export function GlobalChatDrawer({ className }: GlobalChatDrawerProps = {}) {
     </div>
   );
 }
-

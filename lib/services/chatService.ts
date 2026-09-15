@@ -4,7 +4,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { getAvatarUrl } from '@/lib/utils/avatar';
 
+// ---------------------------------------------------------------------------
+// Realtime channel singleton — only ONE channel at a time across the app
+// ---------------------------------------------------------------------------
 let chatChannel: RealtimeChannel | null = null;
+let channelReady = false; // tracks SUBSCRIBED status
 
 export interface TypingUser {
   userId: string;
@@ -217,10 +221,11 @@ export function subscribeToGlobalChat(
   onTypingStatusChange: (typingUsers: TypingUser[]) => void,
   onPresenceChange: (onlineCount: number) => void
 ): () => void {
-  const activeTypingMap = new Map<string, { displayName: string; timeout: NodeJS.Timeout }>();
+  const activeTypingMap = new Map<string, { displayName: string; timeout: ReturnType<typeof setTimeout> }>();
 
-  // Clean up any stale channel
+  // Clean up any stale channels
   if (chatChannel) {
+    channelReady = false;
     try { supabase.removeChannel(chatChannel); } catch { /* ignore */ }
     chatChannel = null;
   }
@@ -234,10 +239,14 @@ export function subscribeToGlobalChat(
   const presenceKey = currentUser?.id ?? `guest-${Math.random().toString(36).slice(7)}`;
 
   const channel = supabase.channel(channelId, {
-    config: { presence: { key: presenceKey } },
+    config: {
+      broadcast: { self: false },
+      presence: { key: presenceKey },
+    },
   });
 
   chatChannel = channel;
+  channelReady = false;
 
   const getTypingList = (): TypingUser[] => {
     return Array.from(activeTypingMap.entries()).map(([uId, v]) => ({
@@ -288,6 +297,9 @@ export function subscribeToGlobalChat(
       const key = userId || displayName || username;
       if (!key) return;
 
+      // Skip self
+      if (currentUser?.id && key === currentUser.id) return;
+
       const nameToDisplay = displayName || username || 'Someone';
 
       if (isTyping) {
@@ -297,7 +309,7 @@ export function subscribeToGlobalChat(
         const t = setTimeout(() => {
           activeTypingMap.delete(key);
           onTypingStatusChange(getTypingList());
-        }, 3500);
+        }, 4000); // Auto-expire after 4 seconds if no new typing event
         activeTypingMap.set(key, { displayName: nameToDisplay, timeout: t });
       } else {
         if (activeTypingMap.has(key)) {
@@ -325,17 +337,32 @@ export function subscribeToGlobalChat(
       onPresenceChange(Math.max(count, 1));
     })
     .subscribe(async (status) => {
+      console.log('[Chat Realtime] Channel status:', status);
       if (status === 'SUBSCRIBED') {
+        channelReady = true;
+        console.log('[Chat Realtime] ✅ Channel SUBSCRIBED — realtime is active');
         await channel.track({
           user_id: currentUser?.id || presenceKey,
           display_name: currentUser?.display_name || 'Guest',
           online_at: new Date().toISOString(),
         });
+      } else if (status === 'CHANNEL_ERROR') {
+        channelReady = false;
+        console.error('[Chat Realtime] ❌ CHANNEL_ERROR — check Supabase Realtime config');
+      } else if (status === 'TIMED_OUT') {
+        channelReady = false;
+        console.warn('[Chat Realtime] ⏳ Channel timed out — will retry');
+      } else if (status === 'CLOSED') {
+        channelReady = false;
       }
     });
 
   return () => {
+    channelReady = false;
     if (chatChannel === channel) chatChannel = null;
+    // Clear all typing timeouts
+    activeTypingMap.forEach((v) => clearTimeout(v.timeout));
+    activeTypingMap.clear();
     try { supabase.removeChannel(channel); } catch { /* ignore */ }
   };
 }
@@ -343,11 +370,23 @@ export function subscribeToGlobalChat(
 // ---------------------------------------------------------------------------
 // Broadcast typing status to other subscribers
 // ---------------------------------------------------------------------------
+let lastTypingSent = 0;
+const TYPING_THROTTLE_MS = 800; // Don't flood the channel with typing events
+
 export function sendTypingBroadcast(
   userOrName: string | { id: string; display_name: string },
   isTyping: boolean
 ) {
-  if (!chatChannel) return;
+  if (!chatChannel || !channelReady) {
+    return;
+  }
+
+  // Throttle: don't send isTyping=true more often than every 800ms
+  const now = Date.now();
+  if (isTyping && now - lastTypingSent < TYPING_THROTTLE_MS) {
+    return;
+  }
+  if (isTyping) lastTypingSent = now;
 
   const payload =
     typeof userOrName === 'string'
@@ -358,6 +397,10 @@ export function sendTypingBroadcast(
     type: 'broadcast',
     event: 'typing',
     payload,
+  }).then(() => {
+    // Broadcast sent successfully
+  }).catch((err) => {
+    console.warn('[Chat] Typing broadcast failed:', err);
   });
 }
 
@@ -382,4 +425,3 @@ export async function deleteChatMessage(id: string): Promise<boolean> {
     return false;
   }
 }
-
