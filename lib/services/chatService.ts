@@ -217,12 +217,12 @@ export async function sendChatMessage(
 //   1. Postgres INSERT on chat_messages (DB-level change)
 //   2. WebSocket broadcast for typing indicator
 //   3. Presence sync for online user count
-// ---------------------------------------------------------------------------
 export function subscribeToGlobalChat(
   currentUser: { id: string; display_name: string } | null,
   onNewMessage: (message: ChatMessage) => void,
   onTypingStatusChange: (typingUsers: TypingUser[]) => void,
-  onPresenceChange: (onlineCount: number) => void
+  onPresenceChange: (onlineCount: number) => void,
+  onRacePositionChange?: (data: any) => void
 ): () => void {
   const activeTypingMap = new Map<string, { displayName: string; timeout: ReturnType<typeof setTimeout> }>();
 
@@ -288,7 +288,6 @@ export function subscribeToGlobalChat(
           created_at: string;
         };
 
-        // Fetch author profile for this message
         const { data: profile } = await supabase
           .from('profiles')
           .select('id, username, display_name, avatar_url, role')
@@ -320,24 +319,20 @@ export function subscribeToGlobalChat(
       const key = userId || displayName || username;
       if (!key) return;
 
-      // Don't show self typing
       if (currentUser?.id && key === currentUser.id) return;
 
       const nameToDisplay = displayName || username || 'Someone';
 
       if (isTyping) {
-        // Clear existing timeout for this user
         if (activeTypingMap.has(key)) {
           clearTimeout(activeTypingMap.get(key)!.timeout);
         }
-        // Auto-expire typing after 4 seconds if no new event
         const t = setTimeout(() => {
           activeTypingMap.delete(key);
           onTypingStatusChange(getTypingList());
         }, 4000);
         activeTypingMap.set(key, { displayName: nameToDisplay, timeout: t });
       } else {
-        // User stopped typing
         if (activeTypingMap.has(key)) {
           clearTimeout(activeTypingMap.get(key)!.timeout);
           activeTypingMap.delete(key);
@@ -347,7 +342,15 @@ export function subscribeToGlobalChat(
       onTypingStatusChange(getTypingList());
     })
     // ---------------------------------------------------------------
-    // 3. Presence → online user count
+    // 3. Real-time Race Position Broadcast
+    // ---------------------------------------------------------------
+    .on('broadcast', { event: 'race_position' }, (payload) => {
+      if (onRacePositionChange) {
+        onRacePositionChange(payload.payload);
+      }
+    })
+    // ---------------------------------------------------------------
+    // 4. Presence → online user count
     // ---------------------------------------------------------------
     .on('presence', { event: 'sync' }, emitPresenceCount)
     .on('presence', { event: 'join' }, emitPresenceCount)
@@ -447,4 +450,20 @@ export async function deleteChatMessage(id: string): Promise<boolean> {
     console.error('[deleteChatMessage error]:', err?.message);
     return false;
   }
+}
+
+export function sendRaceProgressBroadcast(payload: {
+  userId: string;
+  displayName: string;
+  lane: number;
+  progress: number;
+  speedMph: number;
+  avatarUrl?: string;
+}) {
+  if (!chatChannel || !channelReady) return;
+  chatChannel.send({
+    type: 'broadcast',
+    event: 'race_position',
+    payload,
+  });
 }
