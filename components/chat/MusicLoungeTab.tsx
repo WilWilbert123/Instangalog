@@ -201,7 +201,7 @@ export function MusicLoungeTab() {
 
   const currentTrack = tracks[currentTrackIndex] || null;
   const currentEmbed = currentTrack
-    ? parseMediaUrl(currentTrack.url, { autoplay: isPlaying, mute: isMuted, startTime: currentTime })
+    ? parseMediaUrl(currentTrack.url, { autoplay: isPlaying, mute: false })
     : null;
   const isEmbeddableTrack = Boolean(currentEmbed?.isEmbeddable);
 
@@ -465,6 +465,7 @@ export function MusicLoungeTab() {
         try {
           audioRef.current.currentTime = targetSyncTimeRef.current;
           if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) < 2) {
+            targetSyncTimeRef.current = 0;
             pendingSyncRef.current = false;
           }
         } catch {}
@@ -725,11 +726,6 @@ export function MusicLoungeTab() {
   useEffect(() => {
     if (!inStudio || !audioRef.current || isEmbeddableTrack) return;
     if (isPlaying && currentTrack) {
-      if (targetSyncTimeRef.current > 0 && Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1) {
-        try {
-          audioRef.current.currentTime = targetSyncTimeRef.current;
-        } catch {}
-      }
       audioRef.current.play().catch(() => {});
     } else {
       audioRef.current.pause();
@@ -879,6 +875,8 @@ export function MusicLoungeTab() {
                 if (targetSyncTimeRef.current > 0) {
                   try {
                     audioRef.current.currentTime = targetSyncTimeRef.current;
+                    targetSyncTimeRef.current = 0;
+                    pendingSyncRef.current = false;
                   } catch {}
                 }
               }
@@ -888,6 +886,8 @@ export function MusicLoungeTab() {
                 if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1.5) {
                   try {
                     audioRef.current.currentTime = targetSyncTimeRef.current;
+                    targetSyncTimeRef.current = 0;
+                    pendingSyncRef.current = false;
                   } catch {}
                 }
               }
@@ -897,6 +897,8 @@ export function MusicLoungeTab() {
                 if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1.5) {
                   try {
                     audioRef.current.currentTime = targetSyncTimeRef.current;
+                    targetSyncTimeRef.current = 0;
+                    pendingSyncRef.current = false;
                   } catch {}
                 }
               }
