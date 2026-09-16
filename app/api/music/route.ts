@@ -83,3 +83,71 @@ export async function GET() {
     return NextResponse.json({ success: false, error: err?.message || 'Server error' }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { title, artist, audioUrl, coverUrl, genre } = body || {};
+
+    if (!title || !artist || !audioUrl) {
+      return NextResponse.json(
+        { success: false, error: 'Title, artist, and audio/media URL are required' },
+        { status: 400 }
+      );
+    }
+
+    const parsed = parseMediaUrl(audioUrl);
+    const finalCover = coverUrl?.trim() || parsed.thumbnailUrl || '';
+
+    const insertData: any = {
+      title: title.trim(),
+      artist: artist.trim(),
+      audio_url: audioUrl.trim(),
+      cover_url: finalCover,
+      genre: genre?.trim() || (parsed.isEmbeddable ? 'YouTube Audio' : 'Studio Exclusive'),
+    };
+
+    // Attempt direct insertion into public.music
+    const { data: createdTrack, error: insertErr } = await (supabaseAdmin.from('music') as any)
+      .insert([insertData])
+      .select()
+      .single();
+
+    if (insertErr) {
+      // If post_id constraint fails, check if we need to create a studio anchor post
+      if (insertErr.message?.includes('post_id') || insertErr.code === '23502') {
+        const { data: anchorPost } = await (supabaseAdmin.from('posts') as any)
+          .insert([
+            {
+              caption: `[Studio Music] ${title.trim()} - ${artist.trim()}`,
+              user_id: '00000000-0000-0000-0000-000000000000',
+              video_url: null,
+              audio_url: audioUrl.trim(),
+            },
+          ])
+          .select('id')
+          .single();
+
+        if (anchorPost?.id) {
+          insertData.post_id = anchorPost.id;
+          const { data: retryTrack, error: retryErr } = await (supabaseAdmin.from('music') as any)
+            .insert([insertData])
+            .select()
+            .single();
+
+          if (retryErr) {
+            return NextResponse.json({ success: false, error: retryErr.message }, { status: 500 });
+          }
+
+          return NextResponse.json({ success: true, music: retryTrack });
+        }
+      }
+
+      return NextResponse.json({ success: false, error: insertErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, music: createdTrack });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Server error' }, { status: 500 });
+  }
+}

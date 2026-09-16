@@ -23,6 +23,8 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
+  Plus,
+  UploadCloud,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
@@ -109,12 +111,32 @@ export function MusicLoungeTab() {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
+  // Admin upload track state
+  const [showAddTrackForm, setShowAddTrackForm] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newArtist, setNewArtist] = useState('');
+  const [newAudioUrl, setNewAudioUrl] = useState('');
+  const [newCoverUrl, setNewCoverUrl] = useState('');
+  const [newGenre, setNewGenre] = useState('');
+  const [addingTrack, setAddingTrack] = useState(false);
+  const [addTrackMsg, setAddTrackMsg] = useState('');
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<any>(null);
 
   const isAdmin = Boolean(
     user && (user.role === 'admin' || user.email?.toLowerCase() === 'johnwilbertgamis2022@gmail.com')
   );
+
+  const tracksRef = useRef<AudioTrack[]>([]);
+  useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
+
+  const isAdminRef = useRef(isAdmin);
+  useEffect(() => {
+    isAdminRef.current = isAdmin;
+  }, [isAdmin]);
 
   // 1. Fetch real music tracks from Supabase API route
   const fetchRealMusic = useCallback(async () => {
@@ -189,6 +211,7 @@ export function MusicLoungeTab() {
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const presenceParticipants: StudioParticipant[] = [];
+        let djPresence: any = null;
 
         Object.keys(state).forEach((key) => {
           const presences = state[key] as any[];
@@ -200,10 +223,35 @@ export function MusicLoungeTab() {
               displayName: p.displayName || p.username || 'Listener',
               avatar: p.avatar || '',
             });
+            if (p.isDj) {
+              djPresence = p;
+            }
           }
         });
 
         setActiveUsers(presenceParticipants);
+
+        // Auto-sync listener player to Admin DJ's playing track & state
+        if (!isAdminRef.current && djPresence) {
+          const currentTracks = tracksRef.current;
+          let targetIdx = -1;
+          if (djPresence.trackId && currentTracks.length > 0) {
+            targetIdx = currentTracks.findIndex((t) => t.id === djPresence.trackId);
+          }
+          if (
+            targetIdx === -1 &&
+            typeof djPresence.trackIndex === 'number' &&
+            currentTracks[djPresence.trackIndex]
+          ) {
+            targetIdx = djPresence.trackIndex;
+          }
+          if (targetIdx !== -1) {
+            setCurrentTrackIndex(targetIdx);
+          }
+          if (typeof djPresence.isPlaying === 'boolean') {
+            setIsPlaying(djPresence.isPlaying);
+          }
+        }
       })
       .on('broadcast', { event: 'song_request' }, (payload) => {
         const { username, displayName, songTitle } = payload.payload || {};
@@ -240,10 +288,26 @@ export function MusicLoungeTab() {
         }
       })
       .on('broadcast', { event: 'admin_track_change' }, (payload) => {
-        const { trackIndex } = payload.payload || {};
-        if (typeof trackIndex === 'number' && tracks[trackIndex]) {
-          setCurrentTrackIndex(trackIndex);
-          setIsPlaying(true);
+        const { trackIndex, trackId, isPlaying: targetIsPlaying } = payload.payload || {};
+        const currentTracks = tracksRef.current;
+        let targetIdx = -1;
+
+        if (trackId && currentTracks.length > 0) {
+          targetIdx = currentTracks.findIndex((t) => t.id === trackId);
+        }
+        if (
+          targetIdx === -1 &&
+          typeof trackIndex === 'number' &&
+          currentTracks[trackIndex]
+        ) {
+          targetIdx = trackIndex;
+        }
+
+        if (targetIdx !== -1) {
+          setCurrentTrackIndex(targetIdx);
+        }
+        if (typeof targetIsPlaying === 'boolean') {
+          setIsPlaying(targetIsPlaying);
         }
       })
       .subscribe(async (status) => {
@@ -253,6 +317,10 @@ export function MusicLoungeTab() {
             username: user.username,
             displayName: user.display_name,
             avatar: user.avatar_url,
+            isDj: isAdmin,
+            trackIndex: currentTrackIndex,
+            trackId: currentTrack?.id,
+            isPlaying,
           });
         }
       });
@@ -262,7 +330,42 @@ export function MusicLoungeTab() {
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [inStudio, user, tracks, fetchSongRequestsQueue]);
+  }, [inStudio, user, fetchSongRequestsQueue, isAdmin]);
+
+  // Sync listener player when tracks finish loading
+  useEffect(() => {
+    if (!inStudio || isAdmin || tracks.length === 0 || !channelRef.current) return;
+    const state = channelRef.current.presenceState?.();
+    if (!state) return;
+
+    let djPresence: any = null;
+    Object.keys(state).forEach((key) => {
+      const presences = state[key] as any[];
+      if (presences && presences.length > 0 && presences[0].isDj) {
+        djPresence = presences[0];
+      }
+    });
+
+    if (djPresence) {
+      let targetIdx = -1;
+      if (djPresence.trackId) {
+        targetIdx = tracks.findIndex((t) => t.id === djPresence.trackId);
+      }
+      if (
+        targetIdx === -1 &&
+        typeof djPresence.trackIndex === 'number' &&
+        tracks[djPresence.trackIndex]
+      ) {
+        targetIdx = djPresence.trackIndex;
+      }
+      if (targetIdx !== -1) {
+        setCurrentTrackIndex(targetIdx);
+      }
+      if (typeof djPresence.isPlaying === 'boolean') {
+        setIsPlaying(djPresence.isPlaying);
+      }
+    }
+  }, [tracks, inStudio, isAdmin]);
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
@@ -321,6 +424,28 @@ export function MusicLoungeTab() {
         audioRef.current.pause();
       }
     }
+
+    if (channelRef.current && user) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'admin_track_change',
+        payload: {
+          trackIndex: currentTrackIndex,
+          trackId: currentTrack.id,
+          isPlaying: nextState,
+        },
+      });
+      channelRef.current.track({
+        user_id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        avatar: user.avatar_url,
+        isDj: true,
+        trackIndex: currentTrackIndex,
+        trackId: currentTrack.id,
+        isPlaying: nextState,
+      });
+    }
   };
 
   const handleNextTrack = () => {
@@ -335,14 +460,29 @@ export function MusicLoungeTab() {
       nextIdx = (currentTrackIndex + 1) % tracks.length;
     }
 
+    const nextTrack = tracks[nextIdx];
     setCurrentTrackIndex(nextIdx);
     setIsPlaying(true);
 
-    if (channelRef.current) {
+    if (channelRef.current && user) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'admin_track_change',
-        payload: { trackIndex: nextIdx },
+        payload: {
+          trackIndex: nextIdx,
+          trackId: nextTrack?.id,
+          isPlaying: true,
+        },
+      });
+      channelRef.current.track({
+        user_id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        avatar: user.avatar_url,
+        isDj: true,
+        trackIndex: nextIdx,
+        trackId: nextTrack?.id,
+        isPlaying: true,
       });
     }
   };
@@ -350,34 +490,63 @@ export function MusicLoungeTab() {
   const handlePrevTrack = () => {
     if (!isAdmin || tracks.length === 0) return;
     const prevIdx = (currentTrackIndex - 1 + tracks.length) % tracks.length;
+    const prevTrack = tracks[prevIdx];
     setCurrentTrackIndex(prevIdx);
     setIsPlaying(true);
 
-    if (channelRef.current) {
+    if (channelRef.current && user) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'admin_track_change',
-        payload: { trackIndex: prevIdx },
+        payload: {
+          trackIndex: prevIdx,
+          trackId: prevTrack?.id,
+          isPlaying: true,
+        },
+      });
+      channelRef.current.track({
+        user_id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        avatar: user.avatar_url,
+        isDj: true,
+        trackIndex: prevIdx,
+        trackId: prevTrack?.id,
+        isPlaying: true,
       });
     }
   };
 
   const handleSelectTrack = (index: number) => {
     if (!isAdmin || !tracks[index]) return;
+    const targetTrack = tracks[index];
     setCurrentTrackIndex(index);
     setIsPlaying(true);
 
-    const targetTrack = tracks[index];
     const parsed = parseMediaUrl(targetTrack.url);
     if (!parsed.isEmbeddable && audioRef.current) {
       audioRef.current.play().catch(() => {});
     }
 
-    if (channelRef.current) {
+    if (channelRef.current && user) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'admin_track_change',
-        payload: { trackIndex: index },
+        payload: {
+          trackIndex: index,
+          trackId: targetTrack.id,
+          isPlaying: true,
+        },
+      });
+      channelRef.current.track({
+        user_id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        avatar: user.avatar_url,
+        isDj: true,
+        trackIndex: index,
+        trackId: targetTrack.id,
+        isPlaying: true,
       });
     }
   };
@@ -400,12 +569,59 @@ export function MusicLoungeTab() {
   };
 
   useEffect(() => {
-    if (inStudio && audioRef.current && isPlaying && currentTrack) {
+    if (!inStudio || !audioRef.current || isEmbeddableTrack) return;
+    if (isPlaying && currentTrack) {
       audioRef.current.play().catch(() => {});
+    } else {
+      audioRef.current.pause();
     }
-  }, [currentTrackIndex, inStudio, currentTrack, isPlaying]);
+  }, [currentTrackIndex, inStudio, currentTrack, isPlaying, isEmbeddableTrack]);
 
-  // 8. Handle Listener Song Request Submission
+  // 8. Admin Add Track Handler
+  const handleAddStudioTrack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newArtist.trim() || !newAudioUrl.trim() || addingTrack) return;
+
+    setAddingTrack(true);
+    setAddTrackMsg('');
+
+    try {
+      const res = await fetch('/api/music', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newTitle.trim(),
+          artist: newArtist.trim(),
+          audioUrl: newAudioUrl.trim(),
+          coverUrl: newCoverUrl.trim(),
+          genre: newGenre.trim() || 'Studio Exclusive',
+        }),
+      });
+
+      const data = await res.json();
+      if (data?.success) {
+        setAddTrackMsg('Track added to Pagpag Party Studio!');
+        setNewTitle('');
+        setNewArtist('');
+        setNewAudioUrl('');
+        setNewCoverUrl('');
+        setNewGenre('');
+        fetchRealMusic();
+        setTimeout(() => {
+          setShowAddTrackForm(false);
+          setAddTrackMsg('');
+        }, 1200);
+      } else {
+        setAddTrackMsg(`Error: ${data?.error || 'Failed to add track'}`);
+      }
+    } catch (err: any) {
+      setAddTrackMsg(`Error: ${err?.message || 'Network error'}`);
+    } finally {
+      setAddingTrack(false);
+    }
+  };
+
+  // 9. Handle Listener Song Request Submission
   const handleSubmitSongRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -685,13 +901,95 @@ export function MusicLoungeTab() {
                   <h4 className="text-xs font-black uppercase text-white font-mono flex items-center gap-2">
                     <Music2 className="w-4 h-4 text-white" /> Admin DJ Music Library ({tracks.length})
                   </h4>
-                  <button
-                    onClick={() => setShowPlaylistModal(false)}
-                    className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg"
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {isAdmin && (
+                      <button
+                        onClick={() => setShowAddTrackForm((prev) => !prev)}
+                        className="text-xs text-black font-bold px-2.5 py-1 bg-white hover:bg-zinc-200 rounded-lg flex items-center gap-1 transition"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {showAddTrackForm ? 'Cancel' : 'Add Track'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setShowPlaylistModal(false);
+                        setShowAddTrackForm(false);
+                      }}
+                      className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
+
+                {/* Admin Upload / Add Track Form Accordion */}
+                {isAdmin && showAddTrackForm && (
+                  <form onSubmit={handleAddStudioTrack} className="mb-4 p-3 rounded-xl bg-zinc-900 border border-zinc-700 space-y-2.5 font-mono">
+                    <h5 className="text-[11px] font-bold text-white uppercase flex items-center gap-1.5">
+                      <UploadCloud className="w-3.5 h-3.5 text-white" /> Add Music Track (Studio Playlist Only)
+                    </h5>
+
+                    {addTrackMsg && (
+                      <p className={`text-[10px] ${addTrackMsg.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {addTrackMsg}
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Song Title *"
+                        value={newTitle}
+                        onChange={(e) => setNewTitle(e.target.value)}
+                        required
+                        className="px-2.5 py-1.5 rounded-lg bg-black border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Artist / DJ Name *"
+                        value={newArtist}
+                        onChange={(e) => setNewArtist(e.target.value)}
+                        required
+                        className="px-2.5 py-1.5 rounded-lg bg-black border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                      />
+                    </div>
+
+                    <input
+                      type="url"
+                      placeholder="Audio URL or YouTube Link (e.g. https://youtu.be/...) *"
+                      value={newAudioUrl}
+                      onChange={(e) => setNewAudioUrl(e.target.value)}
+                      required
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-black border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="url"
+                        placeholder="Optional Cover Image URL"
+                        value={newCoverUrl}
+                        onChange={(e) => setNewCoverUrl(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-black border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Genre (e.g. Budots, Remix, Pop)"
+                        value={newGenre}
+                        onChange={(e) => setNewGenre(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-black border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={addingTrack || !newTitle.trim() || !newArtist.trim() || !newAudioUrl.trim()}
+                      className="w-full py-1.5 rounded-lg bg-white text-black font-bold text-xs hover:bg-zinc-200 transition disabled:opacity-50"
+                    >
+                      {addingTrack ? 'Adding Track...' : 'Save Track to Studio Playlist'}
+                    </button>
+                  </form>
+                )}
 
                 <div className="flex-1 overflow-y-auto space-y-2">
                   {tracks.length === 0 ? (
