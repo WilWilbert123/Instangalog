@@ -123,6 +123,7 @@ export function MusicLoungeTab() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<any>(null);
+  const lastPresenceTimeUpdateRef = useRef<number>(0);
 
   const isAdmin = Boolean(
     user && (user.role === 'admin' || user.email?.toLowerCase() === 'johnwilbertgamis2022@gmail.com')
@@ -188,7 +189,7 @@ export function MusicLoungeTab() {
 
   const currentTrack = tracks[currentTrackIndex] || null;
   const currentEmbed = currentTrack
-    ? parseMediaUrl(currentTrack.url, { autoplay: isPlaying, mute: isMuted })
+    ? parseMediaUrl(currentTrack.url, { autoplay: isPlaying, mute: isMuted, startTime: currentTime })
     : null;
   const isEmbeddableTrack = Boolean(currentEmbed?.isEmbeddable);
 
@@ -231,7 +232,7 @@ export function MusicLoungeTab() {
 
         setActiveUsers(presenceParticipants);
 
-        // Auto-sync listener player to Admin DJ's playing track & state
+        // Auto-sync listener player to Admin DJ's playing track, state & currentTime
         if (!isAdminRef.current && djPresence) {
           const currentTracks = tracksRef.current;
           let targetIdx = -1;
@@ -250,6 +251,12 @@ export function MusicLoungeTab() {
           }
           if (typeof djPresence.isPlaying === 'boolean') {
             setIsPlaying(djPresence.isPlaying);
+          }
+          if (typeof djPresence.currentTime === 'number' && djPresence.currentTime > 0) {
+            setCurrentTime(djPresence.currentTime);
+            if (audioRef.current && Math.abs(audioRef.current.currentTime - djPresence.currentTime) > 2) {
+              audioRef.current.currentTime = djPresence.currentTime;
+            }
           }
         }
       })
@@ -288,7 +295,7 @@ export function MusicLoungeTab() {
         }
       })
       .on('broadcast', { event: 'admin_track_change' }, (payload) => {
-        const { trackIndex, trackId, isPlaying: targetIsPlaying } = payload.payload || {};
+        const { trackIndex, trackId, isPlaying: targetIsPlaying, currentTime: targetTime } = payload.payload || {};
         const currentTracks = tracksRef.current;
         let targetIdx = -1;
 
@@ -309,6 +316,12 @@ export function MusicLoungeTab() {
         if (typeof targetIsPlaying === 'boolean') {
           setIsPlaying(targetIsPlaying);
         }
+        if (typeof targetTime === 'number' && targetTime > 0) {
+          setCurrentTime(targetTime);
+          if (audioRef.current && Math.abs(audioRef.current.currentTime - targetTime) > 2) {
+            audioRef.current.currentTime = targetTime;
+          }
+        }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -321,6 +334,7 @@ export function MusicLoungeTab() {
             trackIndex: currentTrackIndex,
             trackId: currentTrack?.id,
             isPlaying,
+            currentTime: audioRef.current?.currentTime || currentTime || 0,
           });
         }
       });
@@ -364,14 +378,40 @@ export function MusicLoungeTab() {
       if (typeof djPresence.isPlaying === 'boolean') {
         setIsPlaying(djPresence.isPlaying);
       }
+      if (typeof djPresence.currentTime === 'number' && djPresence.currentTime > 0) {
+        setCurrentTime(djPresence.currentTime);
+        if (audioRef.current && Math.abs(audioRef.current.currentTime - djPresence.currentTime) > 2) {
+          audioRef.current.currentTime = djPresence.currentTime;
+        }
+      }
     }
   }, [tracks, inStudio, isAdmin]);
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const cur = audioRef.current.currentTime;
+      setCurrentTime(cur);
       setDuration(audioRef.current.duration || 0);
+
+      // Periodically update Admin DJ's currentTime in presence (once every 4s)
+      if (isAdminRef.current && channelRef.current && user && isPlaying) {
+        const now = Date.now();
+        if (now - lastPresenceTimeUpdateRef.current > 4000) {
+          lastPresenceTimeUpdateRef.current = now;
+          channelRef.current.track({
+            user_id: user.id,
+            username: user.username,
+            displayName: user.display_name,
+            avatar: user.avatar_url,
+            isDj: true,
+            trackIndex: currentTrackIndex,
+            trackId: currentTrack?.id,
+            isPlaying: true,
+            currentTime: cur,
+          });
+        }
+      }
     }
   };
 
@@ -433,6 +473,7 @@ export function MusicLoungeTab() {
           trackIndex: currentTrackIndex,
           trackId: currentTrack.id,
           isPlaying: nextState,
+          currentTime: audioRef.current?.currentTime || currentTime || 0,
         },
       });
       channelRef.current.track({
@@ -444,6 +485,7 @@ export function MusicLoungeTab() {
         trackIndex: currentTrackIndex,
         trackId: currentTrack.id,
         isPlaying: nextState,
+        currentTime: audioRef.current?.currentTime || currentTime || 0,
       });
     }
   };
@@ -472,6 +514,7 @@ export function MusicLoungeTab() {
           trackIndex: nextIdx,
           trackId: nextTrack?.id,
           isPlaying: true,
+          currentTime: 0,
         },
       });
       channelRef.current.track({
@@ -483,6 +526,7 @@ export function MusicLoungeTab() {
         trackIndex: nextIdx,
         trackId: nextTrack?.id,
         isPlaying: true,
+        currentTime: 0,
       });
     }
   };
@@ -502,6 +546,7 @@ export function MusicLoungeTab() {
           trackIndex: prevIdx,
           trackId: prevTrack?.id,
           isPlaying: true,
+          currentTime: 0,
         },
       });
       channelRef.current.track({
@@ -513,6 +558,7 @@ export function MusicLoungeTab() {
         trackIndex: prevIdx,
         trackId: prevTrack?.id,
         isPlaying: true,
+        currentTime: 0,
       });
     }
   };
@@ -536,6 +582,7 @@ export function MusicLoungeTab() {
           trackIndex: index,
           trackId: targetTrack.id,
           isPlaying: true,
+          currentTime: 0,
         },
       });
       channelRef.current.track({
@@ -547,6 +594,7 @@ export function MusicLoungeTab() {
         trackIndex: index,
         trackId: targetTrack.id,
         isPlaying: true,
+        currentTime: 0,
       });
     }
   };
@@ -566,6 +614,30 @@ export function MusicLoungeTab() {
     const newTime = parseFloat(e.target.value);
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
+
+    if (channelRef.current && user) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'admin_track_change',
+        payload: {
+          trackIndex: currentTrackIndex,
+          trackId: currentTrack?.id,
+          isPlaying,
+          currentTime: newTime,
+        },
+      });
+      channelRef.current.track({
+        user_id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        avatar: user.avatar_url,
+        isDj: true,
+        trackIndex: currentTrackIndex,
+        trackId: currentTrack?.id,
+        isPlaying,
+        currentTime: newTime,
+      });
+    }
   };
 
   useEffect(() => {
@@ -836,22 +908,22 @@ export function MusicLoungeTab() {
           </button>
         </div>
       ) : (
-        /* LIVE PARTY STUDIO STATE - Split View: Left Sidebar = Members, Right Area = Audio Waveform Spectrum & Player */
-        <div className="my-4 flex-1 flex flex-col md:flex-row border border-zinc-800 rounded-3xl bg-zinc-950 overflow-hidden shadow-2xl relative">
+        /* LIVE PARTY STUDIO STATE - Split View: Left Sidebar/Top Mobile = Members, Right Area = Audio Waveform Spectrum & Player */
+        <div className="my-2 md:my-4 flex-1 flex flex-col md:flex-row border border-zinc-800 rounded-3xl bg-zinc-950 overflow-hidden shadow-2xl relative min-h-0">
           
-          {/* LEFT SIDEBAR: Studio Party Participants / Community Members */}
-          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800 bg-black/90 p-4 flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
-              <h4 className="text-xs font-black uppercase text-zinc-300 tracking-wider font-mono flex items-center gap-1.5">
+          {/* LEFT SIDEBAR (Mobile = Horizontal Top Bar, Desktop = Vertical Sidebar) */}
+          <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800 bg-black/90 p-2.5 md:p-4 flex flex-col shrink-0">
+            <div className="flex items-center justify-between pb-1.5 md:pb-3 border-b border-zinc-800/80 mb-2 md:mb-3">
+              <h4 className="text-[11px] md:text-xs font-black uppercase text-zinc-300 tracking-wider font-mono flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-white" /> Studio Party ({activeUsers.length})
               </h4>
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2.5">
+            <div className="flex md:flex-col overflow-x-auto md:overflow-y-auto gap-2 md:space-y-2.5 hide-scrollbar max-h-16 md:max-h-none shrink-0 flex-1">
               {activeUsers.length === 0 ? (
-                <div className="p-4 text-center text-xs font-mono text-zinc-500">
-                  Connecting to studio room...
+                <div className="p-2 md:p-4 text-center text-xs font-mono text-zinc-500">
+                  Connecting...
                 </div>
               ) : (
                 activeUsers.map((m) => {
@@ -860,11 +932,11 @@ export function MusicLoungeTab() {
                   return (
                     <div
                       key={m.id}
-                      className={`flex items-center gap-2.5 p-2 rounded-xl ${
+                      className={`flex items-center gap-2 p-1.5 md:p-2 rounded-xl shrink-0 min-w-[120px] md:min-w-0 ${
                         isSelf ? 'bg-zinc-900 border border-zinc-700' : 'bg-zinc-950 border border-zinc-800/80'
                       }`}
                     >
-                      <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
+                      <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={avatarSrc}
@@ -876,7 +948,7 @@ export function MusicLoungeTab() {
                         />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h5 className="text-xs font-bold text-white truncate flex items-center gap-1">
+                        <h5 className="text-[11px] md:text-xs font-bold text-white truncate flex items-center gap-1">
                           {m.displayName}
                           {isSelf && isAdmin && <Crown className="w-3 h-3 text-white fill-white" />}
                         </h5>
@@ -892,7 +964,7 @@ export function MusicLoungeTab() {
           </div>
 
           {/* RIGHT MAIN AREA: Dynamic Moving Audio Waveform Spectrum & Live DJ Deck Controls */}
-          <div className="flex-1 p-5 flex flex-col items-center justify-between bg-black relative">
+          <div className="flex-1 p-3 md:p-5 flex flex-col justify-between bg-black relative overflow-y-auto min-h-0 space-y-3">
             
             {/* Admin Music Track Selector Modal */}
             {showPlaylistModal && (
@@ -956,7 +1028,7 @@ export function MusicLoungeTab() {
                     </div>
 
                     <input
-                      type="url"
+                      type="text"
                       placeholder="Audio URL or YouTube Link (e.g. https://youtu.be/...) *"
                       value={newAudioUrl}
                       onChange={(e) => setNewAudioUrl(e.target.value)}
@@ -966,7 +1038,7 @@ export function MusicLoungeTab() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <input
-                        type="url"
+                        type="text"
                         placeholder="Optional Cover Image URL"
                         value={newCoverUrl}
                         onChange={(e) => setNewCoverUrl(e.target.value)}

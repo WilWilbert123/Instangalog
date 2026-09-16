@@ -23,7 +23,7 @@ export interface MediaEmbedInfo {
 
 export function parseMediaUrl(
   url: string,
-  options?: { autoplay?: boolean; mute?: boolean }
+  options?: { autoplay?: boolean; mute?: boolean; startTime?: number }
 ): MediaEmbedInfo {
   const defaultInfo: MediaEmbedInfo = {
     isEmbeddable: false,
@@ -43,6 +43,8 @@ export function parseMediaUrl(
   const cleanUrl = url.trim();
   const autoplay = options?.autoplay ?? true;
   const mute = options?.mute ?? true;
+  const startTime = options?.startTime && options.startTime > 0 ? Math.floor(options.startTime) : 0;
+  const startParam = startTime > 0 ? `&start=${startTime}` : '';
 
   // 0. Check if URL is ALREADY an embed plugin URL to avoid double-encoding
   if (cleanUrl.includes('facebook.com/plugins/video.php')) {
@@ -61,13 +63,14 @@ export function parseMediaUrl(
   if (cleanUrl.includes('youtube.com/embed/')) {
     const match = cleanUrl.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
     const videoId = match ? match[1] : null;
+    const finalEmbedUrl = startParam && !cleanUrl.includes('start=') ? `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}start=${startTime}` : cleanUrl;
     return {
       isEmbeddable: true,
       isDirectVideo: false,
       isDirectAudio: false,
       isDirectImage: false,
       type: 'youtube',
-      embedUrl: cleanUrl,
+      embedUrl: finalEmbedUrl,
       rawUrl: cleanUrl,
       thumbnailUrl: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null,
     };
@@ -112,7 +115,7 @@ export function parseMediaUrl(
       isDirectAudio: false,
       isDirectImage: false,
       type: 'youtube',
-      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=${autoplayParam}&mute=${muteParam}&rel=0&enablejsapi=1&playsinline=1`,
+      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=${autoplayParam}&mute=${muteParam}&rel=0&enablejsapi=1&playsinline=1${startParam}`,
       rawUrl: cleanUrl,
       thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
     };
