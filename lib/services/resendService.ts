@@ -14,9 +14,9 @@ export async function sendMagicLinkEmail({ email, magicLinkUrl }: SendMagicLinkP
   }
 
   try {
-    let fromEmail = process.env.RESEND_FROM_EMAIL || 'Instangalog <auth@send.instangalog.online>';
-    // If Vercel env variable accidentally includes literal double quotes, remove them
-    fromEmail = fromEmail.replace(/^["']|["']$/g, '');
+    const fromEmail = process.env.RESEND_FROM_EMAIL 
+      ? process.env.RESEND_FROM_EMAIL.replace(/^["']|["']$/g, '') 
+      : 'Instangalog <auth@instangalog.online>';
     const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: [email],
