@@ -7,6 +7,7 @@ import {
   SkipForward,
   SkipBack,
   Volume2,
+  Volume1,
   VolumeX,
   Radio,
   Flame,
@@ -91,6 +92,7 @@ export function MusicLoungeTab() {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   
@@ -122,6 +124,14 @@ export function MusicLoungeTab() {
   const [addTrackMsg, setAddTrackMsg] = useState('');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Sync volume and mute state with local audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.muted = isMuted;
+    }
+  }, [volume, isMuted]);
   const channelRef = useRef<any>(null);
   const lastPresenceTimeUpdateRef = useRef<number>(0);
   const pendingSyncRef = useRef<boolean>(false);
@@ -197,7 +207,7 @@ export function MusicLoungeTab() {
 
   // 3. Supabase Realtime WebSocket Connection with Presence for Pagpag Party Studio
   useEffect(() => {
-    if (!inStudio || !user) return;
+    if (!user) return;
 
     const channel = supabase.channel(PARTY_STUDIO_CHANNEL, {
       config: {
@@ -234,7 +244,25 @@ export function MusicLoungeTab() {
 
         setActiveUsers(presenceParticipants);
 
-        // Auto-sync listener player to Admin DJ's playing track, state & currentTime
+        // If Admin DJ is present, when a new user joins, Admin DJ immediately broadcasts current playback state
+        if (isAdminRef.current && djPresence && channelRef.current) {
+          const curTime = audioRef.current?.currentTime || 0;
+          if (curTime > 0) {
+            channelRef.current.send({
+              type: 'broadcast',
+              event: 'admin_track_change',
+              payload: {
+                trackIndex: currentTrackIndex,
+                trackId: currentTrack?.id,
+                isPlaying: true,
+                currentTime: curTime,
+                updatedAt: Date.now(),
+              },
+            });
+          }
+        }
+
+        // Auto-sync listener player to Admin DJ's playing track, state & live currentTime
         if (!isAdminRef.current && djPresence) {
           const currentTracks = tracksRef.current;
           let targetIdx = -1;
@@ -255,12 +283,20 @@ export function MusicLoungeTab() {
             setIsPlaying(djPresence.isPlaying);
           }
           if (typeof djPresence.currentTime === 'number' && djPresence.currentTime > 0) {
-            targetSyncTimeRef.current = djPresence.currentTime;
+            let liveTime = djPresence.currentTime;
+            if (djPresence.isPlaying && djPresence.updatedAt) {
+              const elapsed = (Date.now() - djPresence.updatedAt) / 1000;
+              if (elapsed > 0 && elapsed < 86400) {
+                liveTime += elapsed;
+              }
+            }
+            targetSyncTimeRef.current = liveTime;
             pendingSyncRef.current = true;
-            setCurrentTime(djPresence.currentTime);
-            if (audioRef.current) {
+            setCurrentTime(liveTime);
+            if (audioRef.current && audioRef.current.readyState >= 1) {
               try {
-                audioRef.current.currentTime = djPresence.currentTime;
+                audioRef.current.currentTime = liveTime;
+                pendingSyncRef.current = false;
               } catch {}
             }
           }
@@ -301,7 +337,7 @@ export function MusicLoungeTab() {
         }
       })
       .on('broadcast', { event: 'admin_track_change' }, (payload) => {
-        const { trackIndex, trackId, isPlaying: targetIsPlaying, currentTime: targetTime } = payload.payload || {};
+        const { trackIndex, trackId, isPlaying: targetIsPlaying, currentTime: targetTime, updatedAt } = payload.payload || {};
         const currentTracks = tracksRef.current;
         let targetIdx = -1;
 
@@ -322,13 +358,23 @@ export function MusicLoungeTab() {
         if (typeof targetIsPlaying === 'boolean') {
           setIsPlaying(targetIsPlaying);
         }
-        if (typeof targetTime === 'number') {
-          targetSyncTimeRef.current = targetTime;
-          pendingSyncRef.current = targetTime > 0;
-          setCurrentTime(targetTime);
-          if (audioRef.current && targetTime > 0) {
+        if (typeof targetTime === 'number' && targetTime > 0) {
+          let liveTime = targetTime;
+          if (targetIsPlaying && updatedAt) {
+            const elapsed = (Date.now() - updatedAt) / 1000;
+            if (elapsed > 0 && elapsed < 86400) {
+              liveTime += elapsed;
+            }
+          }
+          targetSyncTimeRef.current = liveTime;
+          pendingSyncRef.current = true;
+          setCurrentTime(liveTime);
+          if (audioRef.current) {
             try {
-              audioRef.current.currentTime = targetTime;
+              if (audioRef.current.readyState >= 1) {
+                audioRef.current.currentTime = liveTime;
+                pendingSyncRef.current = false;
+              }
             } catch {}
           }
         }
@@ -345,6 +391,7 @@ export function MusicLoungeTab() {
             trackId: currentTrack?.id,
             isPlaying,
             currentTime: audioRef.current?.currentTime || currentTime || 0,
+            updatedAt: Date.now(),
           });
         }
       });
@@ -354,11 +401,11 @@ export function MusicLoungeTab() {
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [inStudio, user, fetchSongRequestsQueue, isAdmin]);
+  }, [user, fetchSongRequestsQueue, isAdmin, currentTrackIndex, currentTrack?.id, isPlaying, currentTime]);
 
   // Sync listener player when tracks finish loading
   useEffect(() => {
-    if (!inStudio || isAdmin || tracks.length === 0 || !channelRef.current) return;
+    if (isAdmin || tracks.length === 0 || !channelRef.current) return;
     const state = channelRef.current.presenceState?.();
     if (!state) return;
 
@@ -389,23 +436,39 @@ export function MusicLoungeTab() {
         setIsPlaying(djPresence.isPlaying);
       }
       if (typeof djPresence.currentTime === 'number' && djPresence.currentTime > 0) {
-        setCurrentTime(djPresence.currentTime);
-        if (audioRef.current && Math.abs(audioRef.current.currentTime - djPresence.currentTime) > 2) {
-          audioRef.current.currentTime = djPresence.currentTime;
+        let liveTime = djPresence.currentTime;
+        if (djPresence.isPlaying && djPresence.updatedAt) {
+          const elapsed = (Date.now() - djPresence.updatedAt) / 1000;
+          if (elapsed > 0 && elapsed < 86400) {
+            liveTime += elapsed;
+          }
+        }
+        targetSyncTimeRef.current = liveTime;
+        pendingSyncRef.current = true;
+        setCurrentTime(liveTime);
+        if (audioRef.current && audioRef.current.readyState >= 1) {
+          try {
+            audioRef.current.currentTime = liveTime;
+            pendingSyncRef.current = false;
+          } catch {}
         }
       }
     }
-  }, [tracks, inStudio, isAdmin]);
+  }, [tracks, isAdmin]);
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
     if (!audioRef.current) return;
 
     if (pendingSyncRef.current && targetSyncTimeRef.current > 0) {
-      try {
-        audioRef.current.currentTime = targetSyncTimeRef.current;
-      } catch {}
-      pendingSyncRef.current = false;
+      if (audioRef.current.readyState >= 1) {
+        try {
+          audioRef.current.currentTime = targetSyncTimeRef.current;
+          if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) < 2) {
+            pendingSyncRef.current = false;
+          }
+        } catch {}
+      }
       return;
     }
 
@@ -413,10 +476,10 @@ export function MusicLoungeTab() {
     setCurrentTime(cur);
     setDuration(audioRef.current.duration || 0);
 
-    // Periodically update Admin DJ's currentTime in presence (once every 3s)
+    // Periodically update Admin DJ's currentTime in presence (once every 2s)
     if (isAdminRef.current && channelRef.current && user && isPlaying) {
       const now = Date.now();
-      if (now - lastPresenceTimeUpdateRef.current > 3000) {
+      if (now - lastPresenceTimeUpdateRef.current > 2000) {
         lastPresenceTimeUpdateRef.current = now;
         channelRef.current.track({
           user_id: user.id,
@@ -428,6 +491,7 @@ export function MusicLoungeTab() {
           trackId: currentTrack?.id,
           isPlaying: true,
           currentTime: cur,
+          updatedAt: now,
         });
       }
     }
@@ -809,11 +873,32 @@ export function MusicLoungeTab() {
             onEnded={handleNextTrack}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={() => {
+              if (audioRef.current) {
+                audioRef.current.volume = isMuted ? 0 : volume;
+                audioRef.current.muted = isMuted;
+                if (targetSyncTimeRef.current > 0) {
+                  try {
+                    audioRef.current.currentTime = targetSyncTimeRef.current;
+                  } catch {}
+                }
+              }
+            }}
+            onCanPlay={() => {
               if (targetSyncTimeRef.current > 0 && audioRef.current) {
-                try {
-                  audioRef.current.currentTime = targetSyncTimeRef.current;
-                } catch {}
-                pendingSyncRef.current = false;
+                if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1.5) {
+                  try {
+                    audioRef.current.currentTime = targetSyncTimeRef.current;
+                  } catch {}
+                }
+              }
+            }}
+            onPlay={() => {
+              if (targetSyncTimeRef.current > 0 && audioRef.current) {
+                if (Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1.5) {
+                  try {
+                    audioRef.current.currentTime = targetSyncTimeRef.current;
+                  } catch {}
+                }
               }
             }}
             muted={isMuted}
@@ -1330,18 +1415,82 @@ export function MusicLoungeTab() {
                   <SkipForward className="w-4 h-4" />
                 </button>
 
-                {/* Volume / Mute */}
-                <button
-                  onClick={() => setIsMuted((prev) => !prev)}
-                  className="p-2.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition active:scale-95"
-                >
-                  {isMuted ? <VolumeX className="w-4 h-4 text-zinc-500" /> : <Volume2 className="w-4 h-4 text-white" />}
-                </button>
+                {/* Volume / Mute Line Slider Control */}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-zinc-900 border border-zinc-800 shrink-0">
+                  <button
+                    onClick={() => setIsMuted((prev) => !prev)}
+                    className="text-zinc-300 hover:text-white transition active:scale-95 shrink-0"
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-4 h-4 text-zinc-500" />
+                    ) : volume < 0.5 ? (
+                      <Volume1 className="w-4 h-4 text-white" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-white" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setVolume(val);
+                      if (val > 0 && isMuted) setIsMuted(false);
+                      if (val === 0 && !isMuted) setIsMuted(true);
+                    }}
+                    className="w-16 sm:w-24 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-white"
+                    title={`Admin Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                  />
+                  <span className="text-[10px] font-mono text-zinc-400 min-w-[24px]">
+                    {Math.round((isMuted ? 0 : volume) * 100)}%
+                  </span>
+                </div>
               </div>
             ) : (
-              <div className="mb-3 px-4 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-zinc-300 text-xs font-mono flex items-center gap-2">
-                <Crown className="w-3.5 h-3.5 text-white" />
-                <span>Admin DJ is playing studio audio (Listening Live)</span>
+              <div className="mb-3 px-4 py-2 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-zinc-300 text-xs font-mono flex items-center gap-2">
+                  <Crown className="w-3.5 h-3.5 text-white" />
+                  <span>Admin DJ is playing studio audio (Listening Live)</span>
+                </div>
+
+                {/* Listener Volume Control Line Slider */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsMuted((prev) => !prev)}
+                    className="text-zinc-300 hover:text-white transition active:scale-95 shrink-0"
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-4 h-4 text-zinc-500" />
+                    ) : volume < 0.5 ? (
+                      <Volume1 className="w-4 h-4 text-white" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-white" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setVolume(val);
+                      if (val > 0 && isMuted) setIsMuted(false);
+                      if (val === 0 && !isMuted) setIsMuted(true);
+                    }}
+                    className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-white"
+                    title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                  />
+                  <span className="text-[10px] font-mono text-zinc-400 min-w-[24px]">
+                    {Math.round((isMuted ? 0 : volume) * 100)}%
+                  </span>
+                </div>
               </div>
             )}
 
