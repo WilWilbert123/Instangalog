@@ -126,10 +126,9 @@ export async function POST(req: Request) {
         {
           user_id: validUserId,
           caption: `[Studio Music] ${title.trim()} - ${artist.trim()}`,
-          visibility: 'private',
-          moderation_status: 'hidden',
           type: 'music',
-          audio_url: audioUrl.trim(),
+          visibility: 'private',
+          moderation_status: 'rejected',
         },
       ])
       .select('id')
@@ -148,7 +147,7 @@ export async function POST(req: Request) {
       post_id: anchorPost.id,
       title: title.trim(),
       artist: artist.trim(),
-      audio_url: audioUrl.trim(),
+      audio_url: formattedUrl,
       cover_url: finalCover,
       genre: genre?.trim() || (parsed.isEmbeddable ? 'YouTube Audio' : 'Studio Exclusive'),
     };
