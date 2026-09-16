@@ -124,6 +124,8 @@ export function MusicLoungeTab() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<any>(null);
   const lastPresenceTimeUpdateRef = useRef<number>(0);
+  const pendingSyncRef = useRef<boolean>(false);
+  const targetSyncTimeRef = useRef<number>(0);
 
   const isAdmin = Boolean(
     user && (user.role === 'admin' || user.email?.toLowerCase() === 'johnwilbertgamis2022@gmail.com')
@@ -253,9 +255,13 @@ export function MusicLoungeTab() {
             setIsPlaying(djPresence.isPlaying);
           }
           if (typeof djPresence.currentTime === 'number' && djPresence.currentTime > 0) {
+            targetSyncTimeRef.current = djPresence.currentTime;
+            pendingSyncRef.current = true;
             setCurrentTime(djPresence.currentTime);
-            if (audioRef.current && Math.abs(audioRef.current.currentTime - djPresence.currentTime) > 2) {
-              audioRef.current.currentTime = djPresence.currentTime;
+            if (audioRef.current) {
+              try {
+                audioRef.current.currentTime = djPresence.currentTime;
+              } catch {}
             }
           }
         }
@@ -316,10 +322,14 @@ export function MusicLoungeTab() {
         if (typeof targetIsPlaying === 'boolean') {
           setIsPlaying(targetIsPlaying);
         }
-        if (typeof targetTime === 'number' && targetTime > 0) {
+        if (typeof targetTime === 'number') {
+          targetSyncTimeRef.current = targetTime;
+          pendingSyncRef.current = targetTime > 0;
           setCurrentTime(targetTime);
-          if (audioRef.current && Math.abs(audioRef.current.currentTime - targetTime) > 2) {
-            audioRef.current.currentTime = targetTime;
+          if (audioRef.current && targetTime > 0) {
+            try {
+              audioRef.current.currentTime = targetTime;
+            } catch {}
           }
         }
       })
@@ -389,28 +399,36 @@ export function MusicLoungeTab() {
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      const cur = audioRef.current.currentTime;
-      setCurrentTime(cur);
-      setDuration(audioRef.current.duration || 0);
+    if (!audioRef.current) return;
 
-      // Periodically update Admin DJ's currentTime in presence (once every 4s)
-      if (isAdminRef.current && channelRef.current && user && isPlaying) {
-        const now = Date.now();
-        if (now - lastPresenceTimeUpdateRef.current > 4000) {
-          lastPresenceTimeUpdateRef.current = now;
-          channelRef.current.track({
-            user_id: user.id,
-            username: user.username,
-            displayName: user.display_name,
-            avatar: user.avatar_url,
-            isDj: true,
-            trackIndex: currentTrackIndex,
-            trackId: currentTrack?.id,
-            isPlaying: true,
-            currentTime: cur,
-          });
-        }
+    if (pendingSyncRef.current && targetSyncTimeRef.current > 0) {
+      try {
+        audioRef.current.currentTime = targetSyncTimeRef.current;
+      } catch {}
+      pendingSyncRef.current = false;
+      return;
+    }
+
+    const cur = audioRef.current.currentTime;
+    setCurrentTime(cur);
+    setDuration(audioRef.current.duration || 0);
+
+    // Periodically update Admin DJ's currentTime in presence (once every 3s)
+    if (isAdminRef.current && channelRef.current && user && isPlaying) {
+      const now = Date.now();
+      if (now - lastPresenceTimeUpdateRef.current > 3000) {
+        lastPresenceTimeUpdateRef.current = now;
+        channelRef.current.track({
+          user_id: user.id,
+          username: user.username,
+          displayName: user.display_name,
+          avatar: user.avatar_url,
+          isDj: true,
+          trackIndex: currentTrackIndex,
+          trackId: currentTrack?.id,
+          isPlaying: true,
+          currentTime: cur,
+        });
       }
     }
   };
@@ -643,6 +661,11 @@ export function MusicLoungeTab() {
   useEffect(() => {
     if (!inStudio || !audioRef.current || isEmbeddableTrack) return;
     if (isPlaying && currentTrack) {
+      if (targetSyncTimeRef.current > 0 && Math.abs(audioRef.current.currentTime - targetSyncTimeRef.current) > 1) {
+        try {
+          audioRef.current.currentTime = targetSyncTimeRef.current;
+        } catch {}
+      }
       audioRef.current.play().catch(() => {});
     } else {
       audioRef.current.pause();
@@ -785,6 +808,14 @@ export function MusicLoungeTab() {
             src={currentTrack.url}
             onEnded={handleNextTrack}
             onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={() => {
+              if (targetSyncTimeRef.current > 0 && audioRef.current) {
+                try {
+                  audioRef.current.currentTime = targetSyncTimeRef.current;
+                } catch {}
+                pendingSyncRef.current = false;
+              }
+            }}
             muted={isMuted}
           />
         )
