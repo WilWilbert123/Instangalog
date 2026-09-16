@@ -153,11 +153,8 @@ export async function createPost(postData: Partial<Post>): Promise<Post> {
   // Process Media URL if applicable
   if (postData.type === 'video' && postData.video) {
     const media = parseMediaUrl(postData.video.video_url);
-    if (media.embedUrl) {
-      postData.video.video_url = media.embedUrl;
-      if (media.thumbnailUrl) {
-        postData.video.thumbnail_url = media.thumbnailUrl;
-      }
+    if (media.thumbnailUrl && !postData.video.thumbnail_url) {
+      postData.video.thumbnail_url = media.thumbnailUrl;
     }
     if (!postData.video.thumbnail_url) {
       postData.video.thumbnail_url = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80';
