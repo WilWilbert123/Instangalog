@@ -14,9 +14,9 @@ export async function sendMagicLinkEmail({ email, magicLinkUrl }: SendMagicLinkP
   }
 
   try {
-    const fromEmail = process.env.RESEND_FROM_EMAIL 
-      ? process.env.RESEND_FROM_EMAIL.replace(/^["']|["']$/g, '') 
-      : 'Instangalog <auth@instangalog.online>';
+    // Using just the raw email address without the 'Name <email>' format
+    // to guarantee it passes Resend's strict validation
+    const fromEmail = 'auth@instangalog.online';
     const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: [email],
