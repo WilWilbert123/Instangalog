@@ -19,7 +19,7 @@ export async function sendMagicLinkEmail({ email, magicLinkUrl }: SendMagicLinkP
     const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: [email],
-      subject: '✨ Your Instangalog Magic Sign-In Link',
+      subject: 'Your Instangalog Magic Sign-In Link',
       html: `
         <!DOCTYPE html>
         <html>
@@ -29,8 +29,8 @@ export async function sendMagicLinkEmail({ email, magicLinkUrl }: SendMagicLinkP
         </head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #090d16; color: #ffffff; margin: 0; padding: 40px 20px;">
           <div style="max-width: 500px; margin: 0 auto; background-color: #111827; border: 1px solid #1f2937; border-radius: 24px; padding: 32px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
-            <div style="width: 56px; height: 56px; margin: 0 auto 20px; background-color: #ffffff; color: #000000; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; line-height: 56px;">
-              ⚡
+            <div style="width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 16px; overflow: hidden;">
+              <img src="https://instangalogpagpag.vercel.app/pagpag.png" alt="Instangalog Logo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 16px;" />
             </div>
             
             <h1 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 12px;">Sign In to Instangalog</h1>
