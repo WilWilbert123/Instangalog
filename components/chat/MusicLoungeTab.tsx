@@ -151,6 +151,15 @@ export function MusicLoungeTab() {
     isAdminRef.current = isAdmin;
   }, [isAdmin]);
 
+  const currentTrackIndexRef = useRef(currentTrackIndex);
+  useEffect(() => { currentTrackIndexRef.current = currentTrackIndex; }, [currentTrackIndex]);
+
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+
   // 1. Fetch real music tracks from Supabase API route
   const fetchRealMusic = useCallback(async () => {
     setLoadingTracks(true);
@@ -386,11 +395,11 @@ export function MusicLoungeTab() {
             username: user.username,
             displayName: user.display_name,
             avatar: user.avatar_url,
-            isDj: isAdmin,
-            trackIndex: currentTrackIndex,
-            trackId: currentTrack?.id,
-            isPlaying,
-            currentTime: audioRef.current?.currentTime || currentTime || 0,
+            isDj: isAdminRef.current,
+            trackIndex: currentTrackIndexRef.current,
+            trackId: tracksRef.current[currentTrackIndexRef.current]?.id,
+            isPlaying: isPlayingRef.current,
+            currentTime: audioRef.current?.currentTime || currentTimeRef.current || 0,
             updatedAt: Date.now(),
           });
         }
@@ -401,7 +410,7 @@ export function MusicLoungeTab() {
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [user, fetchSongRequestsQueue, isAdmin, currentTrackIndex, currentTrack?.id, isPlaying, currentTime]);
+  }, [user, fetchSongRequestsQueue]);
 
   // Sync listener player when tracks finish loading
   useEffect(() => {
@@ -1447,6 +1456,30 @@ export function MusicLoungeTab() {
                     className="w-16 sm:w-24 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-white"
                     title={`Admin Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
                   />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setVolume(0.05); setIsMuted(false); }}
+                      className={`px-1.5 py-0.5 text-[9px] font-mono rounded border transition ${
+                        !isMuted && Math.round(volume * 100) === 5
+                          ? 'bg-white text-black border-white'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      5%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setVolume(0.1); setIsMuted(false); }}
+                      className={`px-1.5 py-0.5 text-[9px] font-mono rounded border transition ${
+                        !isMuted && Math.round(volume * 100) === 10
+                          ? 'bg-white text-black border-white'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      10%
+                    </button>
+                  </div>
                   <span className="text-[10px] font-mono text-zinc-400 min-w-[24px]">
                     {Math.round((isMuted ? 0 : volume) * 100)}%
                   </span>
@@ -1459,7 +1492,7 @@ export function MusicLoungeTab() {
                   <span>Admin DJ is playing studio audio (Listening Live)</span>
                 </div>
 
-                {/* Listener Volume Control Line Slider */}
+                {/* Listener Volume Control Line Slider & Presets */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setIsMuted((prev) => !prev)}
@@ -1489,6 +1522,30 @@ export function MusicLoungeTab() {
                     className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-white"
                     title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
                   />
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setVolume(0.05); setIsMuted(false); }}
+                      className={`px-1.5 py-0.5 text-[9px] font-mono rounded border transition ${
+                        !isMuted && Math.round(volume * 100) === 5
+                          ? 'bg-white text-black border-white'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      5%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setVolume(0.1); setIsMuted(false); }}
+                      className={`px-1.5 py-0.5 text-[9px] font-mono rounded border transition ${
+                        !isMuted && Math.round(volume * 100) === 10
+                          ? 'bg-white text-black border-white'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      10%
+                    </button>
+                  </div>
                   <span className="text-[10px] font-mono text-zinc-400 min-w-[24px]">
                     {Math.round((isMuted ? 0 : volume) * 100)}%
                   </span>
