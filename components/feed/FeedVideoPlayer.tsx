@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
-import { Volume2, VolumeX, Music, Image as ImageIcon } from 'lucide-react';
+import { Volume2, VolumeX, Music, Image as ImageIcon, Play } from 'lucide-react';
 
 interface FeedVideoPlayerProps {
   videoUrl: string;
@@ -66,13 +66,29 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
       className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 shadow-inner group flex items-center justify-center"
     >
       {embedInfo.isEmbeddable ? (
-        <iframe
-          src={embedInfo.embedUrl}
-          title={caption || `${embedInfo.type} player`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          className="w-full h-full border-0 pointer-events-auto"
-        />
+        isVisible ? (
+          <iframe
+            src={embedInfo.embedUrl}
+            title={caption || `${embedInfo.type} player`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="w-full h-full border-0 pointer-events-auto"
+          />
+        ) : (
+          <div className="relative w-full h-full flex flex-col items-center justify-center bg-slate-900 p-4 text-center">
+            {(thumbnailUrl || embedInfo.thumbnailUrl) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumbnailUrl || embedInfo.thumbnailUrl || ''}
+                alt={caption || 'Video preview'}
+                className="absolute inset-0 w-full h-full object-cover opacity-60"
+              />
+            )}
+            <div className="relative z-10 w-10 h-10 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center border border-white/20 text-white">
+              <Play className="w-5 h-5 fill-white translate-x-0.5" />
+            </div>
+          </div>
+        )
       ) : embedInfo.isDirectImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
