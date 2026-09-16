@@ -89,17 +89,21 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/post/${post.id}`
+      : `https://instangalog.online/post/${post.id}`;
+
     if (navigator.share) {
       try {
         await navigator.share({
-          title: post.caption,
-          url: `https://instangalog.online/post/${post.id}`,
+          title: post.caption || 'Check out this post on Instangalog',
+          url: shareUrl,
         });
       } catch {
         // Fallback
       }
     } else {
-      navigator.clipboard.writeText(`https://instangalog.online/post/${post.id}`);
+      navigator.clipboard.writeText(shareUrl);
       alert('Link copied to clipboard!');
     }
   };

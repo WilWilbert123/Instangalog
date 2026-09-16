@@ -44,7 +44,9 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
   };
 
   const handleShare = () => {
-    const shareUrl = `https://instangalog.online/post/${post.id}`;
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/post/${post.id}`
+      : `https://instangalog.online/post/${post.id}`;
     if (navigator.share) {
       navigator.share({ title: post.caption || 'Check out this post', url: shareUrl }).catch(() => {});
     } else {

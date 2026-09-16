@@ -4,8 +4,13 @@ import { SinglePostClient } from '@/components/post/SinglePostClient';
 
 export const revalidate = 0; // Dynamic rendering for latest post stats
 
-export default async function PostPage({ params }: { params: { id: string } }) {
-  const post = await getPostById(params.id);
+export default async function PostPage({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+}) {
+  const resolvedParams = await params;
+  const post = await getPostById(resolvedParams.id);
 
   if (!post) {
     notFound();

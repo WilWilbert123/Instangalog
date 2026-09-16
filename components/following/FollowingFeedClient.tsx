@@ -97,7 +97,9 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   };
 
   const handleShare = (postId: string, captionText: string) => {
-    const shareUrl = `https://instangalog.online/post/${postId}`;
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/post/${postId}`
+      : `https://instangalog.online/post/${postId}`;
     if (navigator.share) {
       navigator.share({ title: captionText, url: shareUrl }).catch(() => {});
     } else {
