@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { CommentItem } from './CommentItem';
 import { X, Send } from 'lucide-react';
 
+import { supabase } from '@/lib/supabase/client';
+
 interface CommentDrawerProps {
   postId: string;
   onClose: () => void;
@@ -20,6 +22,43 @@ export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
 
   useEffect(() => {
     getCommentsForPost(postId).then(setComments);
+
+    const channel = supabase
+      .channel(`comments-${postId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'comments',
+          filter: `post_id=eq.${postId}`,
+        },
+        async (payload) => {
+          const newCommentRecord = payload.new as any;
+
+          if (newCommentRecord.user_id) {
+            const { data: authorProf } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', newCommentRecord.user_id)
+              .maybeSingle();
+
+            if (authorProf) {
+              newCommentRecord.author = authorProf;
+            }
+          }
+
+          setComments((prev) => {
+            if (prev.some((c) => c.id === newCommentRecord.id)) return prev;
+            return [...prev, newCommentRecord as Comment];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [postId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +70,10 @@ export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
     if (!newCommentText.trim()) return;
 
     const created = await addComment(postId, user.id, newCommentText, replyTarget?.id);
-    setComments((prev) => [...prev, created]);
+    setComments((prev) => {
+      if (prev.some((c) => c.id === created.id)) return prev;
+      return [...prev, created];
+    });
     setNewCommentText('');
     setReplyTarget(null);
   };

@@ -20,9 +20,22 @@ export interface NotificationItem {
 }
 
 export async function getUserNotifications(userId: string): Promise<NotificationItem[]> {
+  if (!userId) return [];
+
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`);
+      const json = await res.json();
+      if (res.ok && json.notifications) {
+        return json.notifications as NotificationItem[];
+      }
+    } catch {
+      // Fallthrough
+    }
+  }
+
   try {
-    // 1. Fetch raw notifications for the user
-    const { data: rawNotifs, error } = await supabase
+    let { data: rawNotifs, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
@@ -30,18 +43,25 @@ export async function getUserNotifications(userId: string): Promise<Notification
       .limit(50);
 
     if (error || !rawNotifs || rawNotifs.length === 0) {
+      const res = await (supabaseAdmin.from('notifications') as any)
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      rawNotifs = res.data;
+    }
+
+    if (!rawNotifs || rawNotifs.length === 0) {
       return [];
     }
 
-    // 2. Hydrate actor profile details safely
     const actorIds = Array.from(
       new Set(rawNotifs.map((n: any) => n.actor_id).filter(Boolean))
     );
 
     let actorMap: Record<string, any> = {};
     if (actorIds.length > 0) {
-      const { data: actorProfiles } = await supabase
-        .from('profiles')
+      const { data: actorProfiles } = await (supabaseAdmin.from('profiles') as any)
         .select('id, username, display_name, avatar_url')
         .in('id', actorIds);
 
