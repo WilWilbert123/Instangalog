@@ -14,17 +14,22 @@ export async function sendMagicLinkEmail({ email, magicLinkUrl }: SendMagicLinkP
   }
 
   try {
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Instangalog <auth@echostamp.online>';
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Instangalog <auth@send.instangalog.online>';
 
     const { data, error } = await resend.emails.send({
       from: fromEmail,
       to: [email],
       subject: 'Your Instangalog Magic Sign-In Link',
+      text: `Sign In to Instangalog\n\nClick or copy the link below to sign in to your account (valid for 10 minutes):\n\n${magicLinkUrl}\n\nIf you didn't request this email, you can safely ignore it.`,
+      headers: {
+        'X-Entity-Ref-ID': `auth-${Date.now()}`,
+      },
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Sign In to Instangalog</title>
         </head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #090d16; color: #ffffff; margin: 0; padding: 40px 20px;">
