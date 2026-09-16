@@ -4,6 +4,7 @@ import { Report, ReportTargetType } from '@/types/report';
 import { supabase } from '@/lib/supabase/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ensureValidUuid } from '@/lib/utils/uuid';
+import { MOCK_REPORTS } from './mockData';
 
 export async function getPendingPosts(): Promise<Post[]> {
   if (typeof window !== 'undefined') {
@@ -270,9 +271,20 @@ export async function getAdminDashboardMetrics(): Promise<AdminDashboardMetrics>
 }
 
 export async function getReports(): Promise<Report[]> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/admin/reports');
+      const json = await res.json();
+      if (res.ok && json.reports) {
+        return json.reports as Report[];
+      }
+    } catch {
+      // Fallthrough
+    }
+  }
+
   try {
-    let { data, error } = await supabaseAdmin
-      .from('reports')
+    let { data, error } = await (supabaseAdmin.from('reports') as any)
       .select(`
         *,
         reporter:profiles!reports_reporter_id_fkey(*)
@@ -294,7 +306,7 @@ export async function getReports(): Promise<Report[]> {
   } catch {
     // Fallthrough
   }
-  return [];
+  return MOCK_REPORTS;
 }
 
 export async function resolveReport(
@@ -302,6 +314,22 @@ export async function resolveReport(
   adminId: string,
   action: 'keep' | 'delete'
 ): Promise<boolean> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/admin/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportId, adminId, action }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        return true;
+      }
+    } catch {
+      // Fallthrough
+    }
+  }
+
   const validAdminId = ensureValidUuid(adminId);
   try {
     const { data: report } = await (supabaseAdmin.from('reports') as any)

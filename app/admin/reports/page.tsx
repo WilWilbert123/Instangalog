@@ -218,7 +218,7 @@ export default function AdminReportsPage() {
                 </div>
 
                 {/* Reason & Description */}
-                <div className="space-y-1 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+                <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800/80">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0" />
                     <span>Reason: {report.reason}</span>
@@ -227,6 +227,18 @@ export default function AdminReportsPage() {
                     <p className="text-xs text-slate-600 dark:text-slate-300 pl-5 leading-relaxed">
                       {report.description}
                     </p>
+                  )}
+                  {report.target_id && (
+                    <div className="pt-2 pl-5 flex items-center gap-2">
+                      <a
+                        href={`/post/${report.target_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+                      >
+                        <span>Inspect Target Post ↗</span>
+                      </a>
+                    </div>
                   )}
                 </div>
 

@@ -13,11 +13,12 @@ import { getUserPendingPosts } from '@/lib/services/postService';
 
 interface ProfileHeaderProps {
   initialProfile: Profile;
+  actualPostsCount?: number;
 }
 
 import { checkIsFollowing, toggleFollow } from '@/lib/services/followService';
 
-export function ProfileHeader({ initialProfile }: ProfileHeaderProps) {
+export function ProfileHeader({ initialProfile, actualPostsCount }: ProfileHeaderProps) {
   const router = useRouter();
   const { user, openAuthModal } = useAuthStore();
   const [profile, setProfile] = useState<Profile>(initialProfile);
@@ -221,7 +222,9 @@ export function ProfileHeader({ initialProfile }: ProfileHeaderProps) {
             {/* Metrics Counter */}
             <div className="flex items-center justify-center sm:justify-start gap-6 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
               <div>
-                <span className="font-bold text-slate-900 dark:text-white text-sm block">{profile.posts_count}</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm block">
+                  {Math.max(profile.posts_count || 0, actualPostsCount || 0)}
+                </span>
                 <span className="text-slate-500 dark:text-slate-400 text-[11px]">Posts</span>
               </div>
               <div>
