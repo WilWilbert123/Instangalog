@@ -27,14 +27,18 @@ export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
 
     const { data, error } = await query;
 
-    if (!error && data) {
+    if (!error && data && data.length > 0) {
       return data as unknown as Post[];
     }
   } catch {
     // Supabase query error
   }
 
-  return [];
+  let fallback = MOCK_POSTS.filter((p) => p.visibility === 'public' && p.moderation_status === 'approved');
+  if (type) {
+    fallback = fallback.filter((p) => p.type === type);
+  }
+  return fallback;
 }
 
 export async function getFYPVideos(): Promise<Post[]> {
@@ -80,6 +84,8 @@ export async function getUserPendingPosts(userId: string): Promise<Post[]> {
 }
 
 export async function getPostById(id: string): Promise<Post | null> {
+  if (!id) return null;
+
   try {
     let { data, error } = await supabaseAdmin
       .from('posts')
@@ -116,6 +122,12 @@ export async function getPostById(id: string): Promise<Post | null> {
     }
   } catch {
     // Supabase query error
+  }
+
+  // Fallback to MOCK_POSTS if not found in database
+  const mock = MOCK_POSTS.find((p) => p.id === id);
+  if (mock) {
+    return mock;
   }
 
   return null;
