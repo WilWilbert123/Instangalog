@@ -5,6 +5,7 @@ import { Search, Send, MessageSquare, ArrowLeft, Lock, Sparkles, RefreshCw, User
 import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { supabase } from '@/lib/supabase/client';
+import Link from 'next/link';
 
 interface DMUser {
   id: string;
@@ -486,28 +487,34 @@ export function DirectMessagesTab() {
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-700 bg-slate-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getAvatarUrl(selectedContact.avatar, selectedContact.username)}
-                    alt={selectedContact.displayName}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(selectedContact.username);
-                    }}
-                  />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    {selectedContact.displayName}
-                    {selectedContact.role === 'admin' && (
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500 text-black font-black">
-                        ADMIN
-                      </span>
-                    )}
-                  </h3>
-                  <span className="text-[10px] text-amber-400 font-medium">@{selectedContact.username}</span>
-                </div>
+                <Link
+                  href={`/profile/${selectedContact.username}`}
+                  className="flex items-center gap-3 group/user hover:opacity-90 transition"
+                  title={`Visit @${selectedContact.username}'s profile`}
+                >
+                  <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-700 bg-slate-800 group-hover/user:border-amber-400 transition shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={getAvatarUrl(selectedContact.avatar, selectedContact.username)}
+                      alt={selectedContact.displayName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(selectedContact.username);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5 group-hover/user:underline">
+                      {selectedContact.displayName}
+                      {selectedContact.role === 'admin' && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500 text-black font-black">
+                          ADMIN
+                        </span>
+                      )}
+                    </h3>
+                    <span className="text-[10px] text-amber-400 font-medium">@{selectedContact.username}</span>
+                  </div>
+                </Link>
               </div>
 
               <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
