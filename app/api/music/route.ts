@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 
 export async function GET() {
   try {
-    // 1. Fetch from public.music table directly without ambiguous relational joins
+    // 1. Fetch from public.music table directly
     const { data: musicRows, error: musicErr } = await (supabaseAdmin.from('music') as any)
       .select('id, post_id, audio_url, cover_url, title, artist, album, description, genre, duration, play_count')
       .order('id', { ascending: false })
@@ -18,15 +19,16 @@ export async function GET() {
     if (musicRows && musicRows.length > 0) {
       musicRows.forEach((m: any) => {
         if (m.audio_url) {
+          const parsed = parseMediaUrl(m.audio_url);
           musicList.push({
             id: m.id,
             postId: m.post_id,
             audioUrl: m.audio_url,
-            coverUrl: m.cover_url || '',
+            coverUrl: m.cover_url || parsed.thumbnailUrl || '',
             title: m.title || 'Community Track',
             artist: m.artist || 'Community Artist',
             album: m.album,
-            genre: m.genre || 'Supabase Music',
+            genre: m.genre || (parsed.isEmbeddable ? 'YouTube Audio' : 'Supabase Music'),
             duration: m.duration || 0,
             playCount: m.play_count || 0,
           });
@@ -58,15 +60,17 @@ export async function GET() {
         const playableUrl = p.audio_url || p.video_url;
         if (playableUrl && !musicList.some((m) => m.audioUrl === playableUrl)) {
           const author = profilesMap[p.user_id] || {};
+          const parsed = parseMediaUrl(playableUrl);
+
           musicList.push({
             id: `post-track-${p.id}`,
             postId: p.id,
             audioUrl: playableUrl,
-            coverUrl: author.avatar_url || '',
+            coverUrl: author.avatar_url || parsed.thumbnailUrl || '',
             title: p.caption || 'Community Media Track',
             artist: author.display_name || author.username || 'Instangalog Creator',
             album: undefined,
-            genre: 'Community Track',
+            genre: parsed.isEmbeddable ? 'YouTube Track' : 'Community Track',
             duration: 0,
             playCount: 0,
           });

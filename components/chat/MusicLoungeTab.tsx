@@ -27,6 +27,7 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { supabase } from '@/lib/supabase/client';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 
 interface AudioTrack {
   id: string;
@@ -164,6 +165,10 @@ export function MusicLoungeTab() {
   }, [fetchSongRequestsQueue]);
 
   const currentTrack = tracks[currentTrackIndex] || null;
+  const currentEmbed = currentTrack
+    ? parseMediaUrl(currentTrack.url, { autoplay: isPlaying, mute: isMuted })
+    : null;
+  const isEmbeddableTrack = Boolean(currentEmbed?.isEmbeddable);
 
   // 3. Supabase Realtime WebSocket Connection with Presence for Pagpag Party Studio
   useEffect(() => {
@@ -439,15 +444,27 @@ export function MusicLoungeTab() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-black text-white p-3 md:p-6 overflow-y-auto relative font-sans">
-      {/* Hidden Audio Element */}
+      {/* Audio Playback Element (HTML5 Audio for direct files OR background iframe for YouTube URLs) */}
       {currentTrack && (
-        <audio
-          ref={audioRef}
-          src={currentTrack.url}
-          onEnded={handleNextTrack}
-          onTimeUpdate={handleTimeUpdate}
-          muted={isMuted}
-        />
+        isEmbeddableTrack ? (
+          isPlaying ? (
+            <iframe
+              key={currentTrack.id}
+              src={currentEmbed?.embedUrl}
+              title={currentTrack.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              className="w-0 h-0 opacity-0 pointer-events-none absolute inset-0 z-0"
+            />
+          ) : null
+        ) : (
+          <audio
+            ref={audioRef}
+            src={currentTrack.url}
+            onEnded={handleNextTrack}
+            onTimeUpdate={handleTimeUpdate}
+            muted={isMuted}
+          />
+        )
       )}
 
       {/* Floating Reactions & Small Song Request Texts Overlay */}
@@ -891,57 +908,60 @@ export function MusicLoungeTab() {
               </div>
             )}
 
-            {/* Listener Song Request Input Box */}
-            <form onSubmit={handleSubmitSongRequest} className="w-full max-w-md mb-3 flex items-center gap-2">
-              <input
-                type="text"
-                value={songRequestInput}
-                onChange={(e) => setSongRequestInput(e.target.value)}
-                placeholder="Type a song title to request..."
-                className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
-              />
-              <button
-                type="submit"
-                disabled={!songRequestInput.trim() || submittingRequest}
-                className="px-3.5 py-2 rounded-xl bg-white text-black font-bold text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5 transition active:scale-95 shrink-0"
-              >
-                <span>Request</span>
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
+            {/* Listener Song Request Input Box & React Vibe Row (Hidden for Admin, Visible for Users) */}
+            {!isAdmin && (
+              <>
+                <form onSubmit={handleSubmitSongRequest} className="w-full max-w-md mb-3 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={songRequestInput}
+                    onChange={(e) => setSongRequestInput(e.target.value)}
+                    placeholder="Type a song title to request..."
+                    className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!songRequestInput.trim() || submittingRequest}
+                    className="px-3.5 py-2 rounded-xl bg-white text-black font-bold text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5 transition active:scale-95 shrink-0"
+                  >
+                    <span>Request</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </form>
 
-            {/* React Vibe Row (Monochrome Black & White Lucide Icons) */}
-            <div className="w-full pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-center gap-2">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono mr-1">React Vibe:</span>
+                <div className="w-full pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-center gap-2">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono mr-1">React Vibe:</span>
 
-              <button
-                onClick={() => triggerReaction('fire')}
-                className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
-              >
-                <Flame className="w-3.5 h-3.5 text-white" /> Fire
-              </button>
+                  <button
+                    onClick={() => triggerReaction('fire')}
+                    className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
+                  >
+                    <Flame className="w-3.5 h-3.5 text-white" /> Fire
+                  </button>
 
-              <button
-                onClick={() => triggerReaction('love')}
-                className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
-              >
-                <Heart className="w-3.5 h-3.5 text-white" /> Love
-              </button>
+                  <button
+                    onClick={() => triggerReaction('love')}
+                    className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
+                  >
+                    <Heart className="w-3.5 h-3.5 text-white" /> Love
+                  </button>
 
-              <button
-                onClick={() => triggerReaction('vibe')}
-                className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-white" /> Vibe
-              </button>
+                  <button
+                    onClick={() => triggerReaction('vibe')}
+                    className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-white" /> Vibe
+                  </button>
 
-              <button
-                onClick={() => triggerReaction('pagpag')}
-                className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
-              >
-                <Disc className="w-3.5 h-3.5 text-white" /> Pagpag
-              </button>
-            </div>
+                  <button
+                    onClick={() => triggerReaction('pagpag')}
+                    className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
+                  >
+                    <Disc className="w-3.5 h-3.5 text-white" /> Pagpag
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
