@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { ReportModal } from '@/components/modals/ReportModal';
 
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
+import { recordPostView } from '@/lib/services/viewService';
 
 interface VideoCardProps {
   post: Post;
@@ -31,6 +32,12 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   const embedInfo = parseMediaUrl(post.video?.video_url || '', { autoplay: isActive, mute: isMuted });
   const isEmbeddable = embedInfo.isEmbeddable;
   const embedSrc = embedInfo.embedUrl;
+
+  useEffect(() => {
+    if (isActive && post?.id) {
+      recordPostView(post.id, user?.id);
+    }
+  }, [isActive, post?.id, user?.id]);
 
   useEffect(() => {
     if (!videoRef.current || hasVideoError || isEmbeddable) return;

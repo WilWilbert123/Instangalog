@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Post } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { togglePostLike } from '@/lib/services/postService';
@@ -14,6 +14,8 @@ import { ReportTargetType } from '@/types/report';
 import { Heart, MessageCircle, Share2, ShieldCheck, Calendar, Flag, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
+import { recordPostView } from '@/lib/services/viewService';
 
 interface SinglePostClientProps {
   initialPost: Post;
@@ -29,6 +31,12 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
 
   const [isLiked, setIsLiked] = useState<boolean>(false);
   const [likesCount, setLikesCount] = useState<number>(initialPost.likes_count || 0);
+
+  useEffect(() => {
+    if (post?.id) {
+      recordPostView(post.id, user?.id);
+    }
+  }, [post?.id, user?.id]);
 
   const handleToggleLike = async () => {
     if (!user) {
