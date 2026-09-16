@@ -70,7 +70,17 @@ export async function POST(req: NextRequest) {
 
         if (error) {
           console.warn('[Admin GenerateLink Error]', error.message);
-        } else if (data?.properties) {
+          let msg = error.message;
+          if (msg.includes('rate limit') || msg.includes('security purposes') || msg.includes('after')) {
+            msg = 'For security purposes, you can only request this after 60 seconds.';
+          }
+          return NextResponse.json(
+            { success: false, error: msg },
+            { status: 429 }
+          );
+        }
+
+        if (data?.properties) {
           // Construct direct, robust token_hash link with email parameter
           let magicLinkUrl = data.properties.action_link;
           if (data.properties.hashed_token) {
@@ -89,14 +99,23 @@ export async function POST(req: NextRequest) {
               message: 'Magic link sent via Resend API',
             });
           }
+
           console.warn('[Resend API Error]', resendResult.error);
+          return NextResponse.json(
+            { success: false, error: resendResult.error || 'Failed to send magic link email via Resend' },
+            { status: 500 }
+          );
         }
       } catch (err: any) {
-        console.warn('[Resend Flow Fallback]', err.message);
+        console.warn('[Resend Flow Exception]', err.message);
+        return NextResponse.json(
+          { success: false, error: err.message || 'Error generating magic link' },
+          { status: 500 }
+        );
       }
     }
 
-    // Fallback if RESEND_API_KEY is not set or failed: use Supabase client OTP
+    // Fallback if RESEND_API_KEY is not set at all: use standard Supabase OTP flow
     return NextResponse.json({
       success: true,
       provider: 'supabase',

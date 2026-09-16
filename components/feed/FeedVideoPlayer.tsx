@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
-import { Volume2, VolumeX } from 'lucide-react';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
+import { Volume2, VolumeX, Music, Image as ImageIcon } from 'lucide-react';
 
 interface FeedVideoPlayerProps {
   videoUrl: string;
@@ -38,12 +38,10 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
     };
   }, []);
 
-  const ytInfo = parseYouTubeUrl(videoUrl, { autoplay: isVisible, mute: isMuted });
-  const isYouTube = ytInfo.isYouTube || Boolean(videoUrl?.includes('youtube.com') || videoUrl?.includes('youtu.be'));
-  const youtubeSrc = isYouTube ? (ytInfo.embedUrl || videoUrl) : '';
+  const embedInfo = parseMediaUrl(videoUrl, { autoplay: isVisible, mute: isMuted });
 
   useEffect(() => {
-    if (isYouTube || !videoRef.current) return;
+    if (embedInfo.isEmbeddable || embedInfo.isDirectImage || !videoRef.current) return;
 
     if (isVisible) {
       const playPromise = videoRef.current.play();
@@ -53,7 +51,7 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
     } else {
       videoRef.current.pause();
     }
-  }, [isVisible, isYouTube]);
+  }, [isVisible, embedInfo.isEmbeddable, embedInfo.isDirectImage]);
 
   const toggleMute = () => {
     if (videoRef.current) {
@@ -65,16 +63,31 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
   return (
     <div
       ref={containerRef}
-      className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 shadow-inner group"
+      className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 shadow-inner group flex items-center justify-center"
     >
-      {isYouTube ? (
+      {embedInfo.isEmbeddable ? (
         <iframe
-          src={youtubeSrc}
-          title={caption || 'YouTube Video'}
+          src={embedInfo.embedUrl}
+          title={caption || `${embedInfo.type} player`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           className="w-full h-full border-0 pointer-events-auto"
         />
+      ) : embedInfo.isDirectImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={embedInfo.rawUrl}
+          alt={caption || 'Shared Media'}
+          className="w-full h-full object-contain"
+        />
+      ) : embedInfo.isDirectAudio ? (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 p-6 text-center space-y-3">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center animate-pulse">
+            <Music className="w-8 h-8" />
+          </div>
+          <p className="text-xs font-bold text-white max-w-xs line-clamp-1">{caption || 'Audio Track'}</p>
+          <audio src={embedInfo.rawUrl} controls className="w-full max-w-sm h-10" />
+        </div>
       ) : (
         <video
           ref={videoRef}
@@ -87,8 +100,6 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
           className="w-full h-full object-cover"
         />
       )}
-
-
     </div>
   );
 }

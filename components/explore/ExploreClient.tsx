@@ -6,7 +6,7 @@ import { Profile } from '@/types/user';
 import { useAuthStore } from '@/stores/authStore';
 import { togglePostLike } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { MusicCard } from '@/components/music/MusicCard';
 import { FeedVideoPlayer } from '@/components/feed/FeedVideoPlayer';
@@ -76,7 +76,7 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
   };
 
   const handleShare = (postId: string, captionText?: string) => {
-    const shareUrl = `${window.location.origin}/post/${postId}`;
+    const shareUrl = `https://instangalog.online/post/${postId}`;
     if (navigator.share) {
       navigator.share({ title: captionText || 'Check out this post', url: shareUrl }).catch(() => {});
     } else {
@@ -268,8 +268,8 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
                   role: 'user',
                 };
 
-                const ytInfo = post.video?.video_url ? parseYouTubeUrl(post.video.video_url, { autoplay: true, mute: true }) : { isYouTube: false, embedUrl: null };
-                const isYouTube = ytInfo.isYouTube || Boolean(post.video?.video_url?.includes('youtube.com') || post.video?.video_url?.includes('youtu.be'));
+                const ytInfo = post.video?.video_url ? parseMediaUrl(post.video.video_url, { autoplay: true, mute: true }) : { isEmbeddable: false, embedUrl: null };
+                const isYouTube = ytInfo.isEmbeddable || Boolean(post.video?.video_url?.includes('youtube.com') || post.video?.video_url?.includes('youtu.be'));
                 const youtubeSrc = ytInfo.embedUrl || post.video?.video_url || '';
 
                 const isLiked = Boolean(likedMap[post.id]);

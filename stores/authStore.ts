@@ -99,38 +99,50 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'https://instangalogpagpag.vercel.app');
       const redirectTo = `${origin}/auth/callback`;
 
-      // 1. Try sending via Resend API route
+      // 1. Send via Resend API route
       const res = await fetch('/api/auth/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
 
-      if (res.ok) {
-        const resData = await res.json();
+      const resData = await res.json().catch(() => null);
+
+      if (resData) {
         if (resData.success && resData.provider === 'resend') {
           return { success: true };
         }
-      }
-
-      // 2. Supabase client fallback if Resend API key is not configured yet
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          emailRedirectTo: redirectTo,
-          shouldCreateUser: true,
-        },
-      });
-
-      if (error) {
-        let msg = error.message;
-        if (msg.includes('rate limit')) {
-          msg = 'Rate limit reached: An email was recently sent. Please check your inbox or wait 60 seconds.';
+        if (!resData.success) {
+          let msg = resData.error || 'Failed to send magic link';
+          if (msg.includes('rate limit') || msg.includes('security purposes') || msg.includes('after')) {
+            msg = 'For security purposes, you can only request this after 60 seconds.';
+          }
+          return { success: false, error: msg };
         }
-        return { success: false, error: msg };
       }
 
-      return { success: true };
+      // 2. Supabase client fallback ONLY if Resend API key is not configured on server
+      if (resData?.provider === 'supabase') {
+        const { error } = await supabase.auth.signInWithOtp({
+          email: cleanEmail,
+          options: {
+            emailRedirectTo: redirectTo,
+            shouldCreateUser: true,
+          },
+        });
+
+        if (error) {
+          let msg = error.message;
+          if (msg.includes('rate limit') || msg.includes('security purposes') || msg.includes('after')) {
+            msg = 'For security purposes, you can only request this after 60 seconds.';
+          }
+          return { success: false, error: msg };
+        }
+
+        return { success: true };
+      }
+
+      return { success: resData?.success ?? false, error: resData?.error || 'Failed to send magic link' };
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to send magic link' };
     }

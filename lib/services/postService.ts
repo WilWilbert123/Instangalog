@@ -2,7 +2,7 @@ import { Post, PostType } from '@/types/post';
 import { MOCK_POSTS } from './mockData';
 import { supabase } from '@/lib/supabase/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { ensureValidUuid } from '@/lib/utils/uuid';
 
 export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
@@ -138,13 +138,13 @@ export async function createPost(postData: Partial<Post>): Promise<Post> {
   const rawUserId = postData.user_id || '00000000-0000-0000-0000-000000000001';
   const userId = ensureValidUuid(rawUserId);
 
-  // Process YouTube video URL if applicable
+  // Process Media URL if applicable
   if (postData.type === 'video' && postData.video) {
-    const yt = parseYouTubeUrl(postData.video.video_url);
-    if (yt.isYouTube && yt.embedUrl) {
-      postData.video.video_url = yt.embedUrl;
-      if (yt.thumbnailUrl) {
-        postData.video.thumbnail_url = yt.thumbnailUrl;
+    const media = parseMediaUrl(postData.video.video_url);
+    if (media.embedUrl) {
+      postData.video.video_url = media.embedUrl;
+      if (media.thumbnailUrl) {
+        postData.video.thumbnail_url = media.thumbnailUrl;
       }
     }
     if (!postData.video.thumbnail_url) {

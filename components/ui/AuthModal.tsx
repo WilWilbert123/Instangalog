@@ -96,7 +96,11 @@ export function AuthModal() {
       setEmailSent(true);
       setResendCooldown(60); // 60s rate-limit prevention cooldown
     } else {
-      setErrorMsg(res.error || 'Failed to send magic link');
+      const err = res.error || 'Failed to send magic link';
+      setErrorMsg(err);
+      if (err.includes('60 seconds') || err.includes('security purposes') || err.includes('Rate limit')) {
+        setResendCooldown(60);
+      }
     }
   };
 
@@ -111,7 +115,11 @@ export function AuthModal() {
     if (res.success) {
       setResendCooldown(60);
     } else {
-      setErrorMsg(res.error || 'Failed to resend magic link');
+      const err = res.error || 'Failed to resend magic link';
+      setErrorMsg(err);
+      if (err.includes('60 seconds') || err.includes('security purposes') || err.includes('Rate limit')) {
+        setResendCooldown(60);
+      }
     }
   };
 

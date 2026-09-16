@@ -5,7 +5,7 @@ import { Post, PostType } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { createPost, togglePostLike } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { uploadMediaToCloudinary } from '@/lib/services/cloudinary';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { MusicCard } from '@/components/music/MusicCard';
@@ -97,7 +97,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   };
 
   const handleShare = (postId: string, captionText: string) => {
-    const shareUrl = `${window.location.origin}/post/${postId}`;
+    const shareUrl = `https://instangalog.online/post/${postId}`;
     if (navigator.share) {
       navigator.share({ title: captionText, url: shareUrl }).catch(() => {});
     } else {
@@ -163,11 +163,11 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
           mediaDuration = Math.round(uploadRes.duration);
         }
       } else if (postType === 'video' && finalMediaUrl) {
-        const yt = parseYouTubeUrl(finalMediaUrl);
-        if (yt.isYouTube && yt.embedUrl) {
-          finalMediaUrl = yt.embedUrl;
-          if (yt.thumbnailUrl) {
-            finalThumbnailUrl = yt.thumbnailUrl;
+        const media = parseMediaUrl(finalMediaUrl);
+        if (media.embedUrl) {
+          finalMediaUrl = media.embedUrl;
+          if (media.thumbnailUrl) {
+            finalThumbnailUrl = media.thumbnailUrl;
           }
         }
       }
@@ -213,10 +213,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
         music:
           postType === 'music'
             ? (() => {
-                const yt = parseYouTubeUrl(finalMediaUrl);
+                const media = parseMediaUrl(finalMediaUrl);
                 return {
-                  audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-                  cover_url: yt.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+                  audio_url: media.embedUrl || finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+                  cover_url: media.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
                   title: caption.trim() || selectedFile?.name || 'New Track',
                   artist: user.display_name,
                   genre: 'Music Audio',
@@ -483,8 +483,8 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
               role: 'user',
             };
 
-            const ytInfo = post.video?.video_url ? parseYouTubeUrl(post.video.video_url, { autoplay: true, mute: true }) : { isYouTube: false, embedUrl: null };
-            const isYouTube = ytInfo.isYouTube || Boolean(post.video?.video_url?.includes('youtube.com') || post.video?.video_url?.includes('youtu.be'));
+            const ytInfo = post.video?.video_url ? parseMediaUrl(post.video.video_url, { autoplay: true, mute: true }) : { isEmbeddable: false, embedUrl: null };
+            const isYouTube = ytInfo.isEmbeddable || Boolean(post.video?.video_url?.includes('youtube.com') || post.video?.video_url?.includes('youtu.be'));
             const youtubeSrc = ytInfo.embedUrl || post.video?.video_url || '';
 
             const isLiked = Boolean(likedMap[post.id]);

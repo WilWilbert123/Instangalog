@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { Video, Image as ImageIcon, Music, Type, Clock, ShieldAlert, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 
 export function UploadTabs() {
   const { user, openAuthModal } = useAuthStore();
@@ -66,11 +66,11 @@ export function UploadTabs() {
     let finalThumbnailUrl = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80';
 
     if (activeTab === 'video' && finalMediaUrl) {
-      const yt = parseYouTubeUrl(finalMediaUrl);
-      if (yt.isYouTube && yt.embedUrl) {
-        finalMediaUrl = yt.embedUrl;
-        if (yt.thumbnailUrl) {
-          finalThumbnailUrl = yt.thumbnailUrl;
+      const media = parseMediaUrl(finalMediaUrl);
+      if (media.embedUrl) {
+        finalMediaUrl = media.embedUrl;
+        if (media.thumbnailUrl) {
+          finalThumbnailUrl = media.thumbnailUrl;
         }
       }
     }
@@ -139,10 +139,10 @@ export function UploadTabs() {
         music:
           activeTab === 'music'
             ? (() => {
-                const yt = parseYouTubeUrl(finalMediaUrl);
+                const media = parseMediaUrl(finalMediaUrl);
                 return {
-                  audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-                  cover_url: yt.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+                  audio_url: media.embedUrl || finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+                  cover_url: media.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
                   title: title || 'New Track',
                   artist: artist || user.display_name,
                   genre,
