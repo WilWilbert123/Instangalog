@@ -96,10 +96,56 @@ export async function POST(req: Request) {
       );
     }
 
-    const parsed = parseMediaUrl(audioUrl);
+    let formattedUrl = audioUrl.trim();
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    const parsed = parseMediaUrl(formattedUrl);
     const finalCover = coverUrl?.trim() || parsed.thumbnailUrl || '';
 
+    // 1. Get a valid user_id from profiles (admin or first available user)
+    const { data: firstProfile } = await (supabaseAdmin.from('profiles') as any)
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const validUserId = firstProfile?.id;
+
+    if (!validUserId) {
+      return NextResponse.json(
+        { success: false, error: 'No valid user profile found in database to attach track' },
+        { status: 400 }
+      );
+    }
+
+    // 2. Create a hidden studio anchor post in `posts` table so `post_id` non-null constraint is satisfied
+    const { data: anchorPost, error: postErr } = await (supabaseAdmin.from('posts') as any)
+      .insert([
+        {
+          user_id: validUserId,
+          caption: `[Studio Music] ${title.trim()} - ${artist.trim()}`,
+          visibility: 'private',
+          moderation_status: 'hidden',
+          type: 'music',
+          audio_url: audioUrl.trim(),
+        },
+      ])
+      .select('id')
+      .single();
+
+    if (postErr || !anchorPost?.id) {
+      console.error('[Music POST API] Anchor post creation error:', postErr);
+      return NextResponse.json(
+        { success: false, error: postErr?.message || 'Failed to create studio track post anchor' },
+        { status: 500 }
+      );
+    }
+
+    // 3. Insert into public.music with post_id = anchorPost.id
     const insertData: any = {
+      post_id: anchorPost.id,
       title: title.trim(),
       artist: artist.trim(),
       audio_url: audioUrl.trim(),
@@ -107,42 +153,13 @@ export async function POST(req: Request) {
       genre: genre?.trim() || (parsed.isEmbeddable ? 'YouTube Audio' : 'Studio Exclusive'),
     };
 
-    // Attempt direct insertion into public.music
     const { data: createdTrack, error: insertErr } = await (supabaseAdmin.from('music') as any)
       .insert([insertData])
       .select()
       .single();
 
     if (insertErr) {
-      // If post_id constraint fails, check if we need to create a studio anchor post
-      if (insertErr.message?.includes('post_id') || insertErr.code === '23502') {
-        const { data: anchorPost } = await (supabaseAdmin.from('posts') as any)
-          .insert([
-            {
-              caption: `[Studio Music] ${title.trim()} - ${artist.trim()}`,
-              user_id: '00000000-0000-0000-0000-000000000000',
-              video_url: null,
-              audio_url: audioUrl.trim(),
-            },
-          ])
-          .select('id')
-          .single();
-
-        if (anchorPost?.id) {
-          insertData.post_id = anchorPost.id;
-          const { data: retryTrack, error: retryErr } = await (supabaseAdmin.from('music') as any)
-            .insert([insertData])
-            .select()
-            .single();
-
-          if (retryErr) {
-            return NextResponse.json({ success: false, error: retryErr.message }, { status: 500 });
-          }
-
-          return NextResponse.json({ success: true, music: retryTrack });
-        }
-      }
-
+      console.error('[Music POST API] Music insert error:', insertErr);
       return NextResponse.json({ success: false, error: insertErr.message }, { status: 500 });
     }
 
