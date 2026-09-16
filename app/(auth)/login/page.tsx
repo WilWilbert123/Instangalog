@@ -7,15 +7,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const { loginWithEmail, loginWithGoogle } = useAuthStore();
+  const { openAuthModal, loginWithGoogle } = useAuthStore();
   const [email, setEmail] = useState('');
   const router = useRouter();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
-    loginWithEmail(email);
-    router.push('/fyp');
+    openAuthModal('Sign in to continue');
   };
 
   return (

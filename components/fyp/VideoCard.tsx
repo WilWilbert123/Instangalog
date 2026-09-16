@@ -9,7 +9,7 @@ import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import Link from 'next/link';
 import { ReportModal } from '@/components/modals/ReportModal';
 
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 
 interface VideoCardProps {
   post: Post;
@@ -28,12 +28,12 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   const [hasVideoError, setHasVideoError] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const ytInfo = post.video?.video_url ? parseYouTubeUrl(post.video.video_url, { autoplay: isActive, mute: isMuted }) : { isYouTube: false, embedUrl: null };
-  const isYouTube = ytInfo.isYouTube || Boolean(post.video?.video_url?.includes('youtube.com') || post.video?.video_url?.includes('youtu.be'));
-  const youtubeSrc = ytInfo.embedUrl || post.video?.video_url || '';
+  const embedInfo = parseMediaUrl(post.video?.video_url || '', { autoplay: isActive, mute: isMuted });
+  const isEmbeddable = embedInfo.isEmbeddable;
+  const embedSrc = embedInfo.embedUrl;
 
   useEffect(() => {
-    if (!videoRef.current || hasVideoError || isYouTube) return;
+    if (!videoRef.current || hasVideoError || isEmbeddable) return;
 
     if (isActive) {
       const playPromise = videoRef.current.play();
@@ -46,10 +46,10 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       videoRef.current.pause();
       setIsPlaying(false);
     }
-  }, [isActive, hasVideoError, isYouTube]);
+  }, [isActive, hasVideoError, isEmbeddable]);
 
   const togglePlay = () => {
-    if (!videoRef.current || hasVideoError || isYouTube) return;
+    if (!videoRef.current || hasVideoError || isEmbeddable) return;
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -93,13 +93,13 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       try {
         await navigator.share({
           title: post.caption,
-          url: window.location.origin + `/post/${post.id}`,
+          url: `https://instangalog.online/post/${post.id}`,
         });
       } catch {
         // Fallback
       }
     } else {
-      navigator.clipboard.writeText(window.location.origin + `/post/${post.id}`);
+      navigator.clipboard.writeText(`https://instangalog.online/post/${post.id}`);
       alert('Link copied to clipboard!');
     }
   };
@@ -112,12 +112,12 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
 
   return (
     <div className="relative w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
-      {/* Video Element or YouTube iframe or Error Poster Fallback */}
-      {isYouTube ? (
+      {/* Video Element or Embeddable iframe (YouTube, Facebook, TikTok, Instagram, etc.) or Error Poster Fallback */}
+      {isEmbeddable ? (
         <div className="relative w-full h-full bg-black flex items-center justify-center">
           <iframe
-            src={youtubeSrc}
-            title={post.caption || 'YouTube Video'}
+            src={embedSrc}
+            title={post.caption || `${embedInfo.type} video`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             className="w-full h-full border-0 pointer-events-auto z-10"
@@ -156,7 +156,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       )}
 
       {/* Play/Pause Overlay indicator for native HTML5 video */}
-      {!isYouTube && !isPlaying && !hasVideoError && (
+      {!isEmbeddable && !isPlaying && !hasVideoError && (
         <div
           onClick={togglePlay}
           className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-auto cursor-pointer z-10"
@@ -168,7 +168,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       )}
 
       {/* Persistent Floating Sound Toggle for uploaded HTML5 videos */}
-      {!isYouTube && !hasVideoError && (
+      {!isEmbeddable && !hasVideoError && (
         <button
           onClick={toggleMute}
           className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 hover:bg-black transition-all z-30 shadow-xl active:scale-95 flex items-center justify-center pointer-events-auto"

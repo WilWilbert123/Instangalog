@@ -5,7 +5,7 @@ import { Post } from '@/types/post';
 import { usePlayerStore } from '@/stores/playerStore';
 import { useAuthStore } from '@/stores/authStore';
 import { togglePostLike } from '@/lib/services/postService';
-import { parseYouTubeUrl } from '@/lib/utils/youtube';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { Play, Pause, Heart, MessageCircle, Share2, Disc, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,8 +24,8 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
 
   if (!music) return null;
 
-  const yt = parseYouTubeUrl(music.audio_url || '');
-  const isYouTube = yt.isYouTube;
+  const yt = parseMediaUrl(music.audio_url || '');
+  const isYouTube = yt.type === 'youtube';
   const coverImage = music.cover_url || (yt.thumbnailUrl ? yt.thumbnailUrl : 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80');
 
   const isCurrentTrack = currentTrack?.audio_url === music.audio_url;
@@ -53,7 +53,7 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
   };
 
   const handleShare = () => {
-    const shareUrl = `${window.location.origin}/post/${post.id}`;
+    const shareUrl = `https://instangalog.online/post/${post.id}`;
     if (navigator.share) {
       navigator.share({ title: music.title, url: shareUrl }).catch(() => {});
     } else {
@@ -72,9 +72,9 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
   return (
     <div className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white space-y-4 shadow-xl hover:shadow-2xl transition-all relative overflow-hidden">
       {/* Hidden YouTube Iframe Player (Hides Video Box Completely, Only Audio Plays) */}
-      {isYouTube && isCurrentTrack && isPlaying && yt.videoId && (
+      {isYouTube && isCurrentTrack && isPlaying && yt.embedUrl && (
         <iframe
-          src={`https://www.youtube.com/embed/${yt.videoId}?autoplay=1&enablejsapi=1&playsinline=1&controls=0`}
+          src={yt.embedUrl.replace('mute=1', 'mute=0') + '&controls=0'}
           allow="autoplay; encrypted-media"
           title={music.title}
           className="w-0 h-0 opacity-0 pointer-events-none absolute -top-9999 -left-9999 invisible"
