@@ -105,6 +105,7 @@ export function MusicLoungeTab() {
   const [songRequestInput, setSongRequestInput] = useState('');
   const [requestQueue, setRequestQueue] = useState<SongRequestItem[]>([]);
   const [showQueueModal, setShowQueueModal] = useState(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -336,6 +337,24 @@ export function MusicLoungeTab() {
     }
   };
 
+  const handleSelectTrack = (index: number) => {
+    if (!isAdmin || !tracks[index]) return;
+    setCurrentTrackIndex(index);
+    setIsPlaying(true);
+
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => {});
+    }
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'admin_track_change',
+        payload: { trackIndex: index },
+      });
+    }
+  };
+
   const toggleShuffle = () => {
     if (!isAdmin) return;
     setIsShuffle((prev) => !prev);
@@ -476,6 +495,16 @@ export function MusicLoungeTab() {
         </div>
 
         <div className="flex items-center gap-2">
+          {inStudio && isAdmin && (
+            <button
+              onClick={() => setShowPlaylistModal((prev) => !prev)}
+              className="px-3 py-1.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-md"
+            >
+              <Music2 className="w-3.5 h-3.5 text-black" />
+              <span>Select Music ({tracks.length})</span>
+            </button>
+          )}
+
           {inStudio && (
             <button
               onClick={() => setShowQueueModal((prev) => !prev)}
@@ -597,6 +626,87 @@ export function MusicLoungeTab() {
           {/* RIGHT MAIN AREA: Dynamic Moving Audio Waveform Spectrum & Live DJ Deck Controls */}
           <div className="flex-1 p-5 flex flex-col items-center justify-between bg-black relative">
             
+            {/* Admin Music Track Selector Modal */}
+            {showPlaylistModal && (
+              <div className="absolute inset-4 z-40 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-4 flex flex-col animate-fadeIn">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
+                  <h4 className="text-xs font-black uppercase text-white font-mono flex items-center gap-2">
+                    <Music2 className="w-4 h-4 text-white" /> Admin DJ Music Library ({tracks.length})
+                  </h4>
+                  <button
+                    onClick={() => setShowPlaylistModal(false)}
+                    className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {tracks.length === 0 ? (
+                    <div className="p-8 text-center text-xs font-mono text-zinc-500">
+                      No music uploaded to public.music table yet. Upload tracks in Supabase to expand the Pagpag Party DJ Library!
+                    </div>
+                  ) : (
+                    tracks.map((track, idx) => {
+                      const isCurrent = idx === currentTrackIndex;
+                      return (
+                        <div
+                          key={track.id || idx}
+                          onClick={() => {
+                            handleSelectTrack(idx);
+                            setShowPlaylistModal(false);
+                          }}
+                          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                            isCurrent
+                              ? 'bg-white text-black border-white font-bold shadow-lg'
+                              : 'bg-zinc-900 border-zinc-800 text-white hover:bg-zinc-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-lg overflow-hidden border ${isCurrent ? 'border-black' : 'border-zinc-700'} bg-black shrink-0 flex items-center justify-center`}>
+                              {track.cover ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img src={getAvatarUrl(track.cover, track.artist)} alt={track.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Music2 className={`w-5 h-5 ${isCurrent ? 'text-black' : 'text-zinc-400'}`} />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="text-xs font-bold truncate">{track.title}</h5>
+                              <p className={`text-[10px] truncate ${isCurrent ? 'text-zinc-700' : 'text-zinc-400'}`}>{track.artist} • {track.genre || 'Music'}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isCurrent && isPlaying ? (
+                              <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 bg-black text-white rounded-lg animate-pulse">
+                                PLAYING LIVE
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectTrack(idx);
+                                  setShowPlaylistModal(false);
+                                }}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                  isCurrent
+                                    ? 'bg-black text-white hover:bg-zinc-800'
+                                    : 'bg-white text-black hover:bg-zinc-200'
+                                }`}
+                              >
+                                Play Now
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Song Request Queue Modal Overlay for Admin & Users */}
             {showQueueModal && (
               <div className="absolute inset-4 z-40 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-4 flex flex-col animate-fadeIn">
