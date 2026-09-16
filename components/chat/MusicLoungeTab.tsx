@@ -105,6 +105,7 @@ export function MusicLoungeTab() {
   const [songRequestInput, setSongRequestInput] = useState('');
   const [requestQueue, setRequestQueue] = useState<SongRequestItem[]>([]);
   const [showQueueModal, setShowQueueModal] = useState(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -159,32 +160,20 @@ export function MusicLoungeTab() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/dms/users?q=')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.success && Array.isArray(data.users)) {
-          const members: StudioParticipant[] = data.users.map((u: any) => ({
-            id: u.id,
-            username: u.username || 'member',
-            displayName: u.display_name || u.username || 'Rocker',
-            avatar: u.avatar_url || '',
-          }));
-          setActiveUsers(members);
-        }
-      })
-      .catch(() => {});
-
     fetchSongRequestsQueue();
   }, [fetchSongRequestsQueue]);
 
   const currentTrack = tracks[currentTrackIndex] || null;
 
-  // 3. Supabase Realtime WebSocket Connection for Pagpag Party Studio
+  // 3. Supabase Realtime WebSocket Connection with Presence for Pagpag Party Studio
   useEffect(() => {
-    if (!inStudio) return;
+    if (!inStudio || !user) return;
 
     const channel = supabase.channel(PARTY_STUDIO_CHANNEL, {
       config: {
+        presence: {
+          key: user.id,
+        },
         broadcast: { self: true },
       },
     });
@@ -192,6 +181,25 @@ export function MusicLoungeTab() {
     channelRef.current = channel;
 
     channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const presenceParticipants: StudioParticipant[] = [];
+
+        Object.keys(state).forEach((key) => {
+          const presences = state[key] as any[];
+          if (presences && presences.length > 0) {
+            const p = presences[0];
+            presenceParticipants.push({
+              id: p.user_id || key,
+              username: p.username || 'member',
+              displayName: p.displayName || p.username || 'Listener',
+              avatar: p.avatar || '',
+            });
+          }
+        });
+
+        setActiveUsers(presenceParticipants);
+      })
       .on('broadcast', { event: 'song_request' }, (payload) => {
         const { username, displayName, songTitle } = payload.payload || {};
         if (songTitle) {
@@ -218,13 +226,23 @@ export function MusicLoungeTab() {
           setIsPlaying(true);
         }
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: user.id,
+            username: user.username,
+            displayName: user.display_name,
+            avatar: user.avatar_url,
+          });
+        }
+      });
 
     return () => {
+      channel.untrack();
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [inStudio, tracks, fetchSongRequestsQueue]);
+  }, [inStudio, user, tracks, fetchSongRequestsQueue]);
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
@@ -315,6 +333,24 @@ export function MusicLoungeTab() {
         type: 'broadcast',
         event: 'admin_track_change',
         payload: { trackIndex: prevIdx },
+      });
+    }
+  };
+
+  const handleSelectTrack = (index: number) => {
+    if (!isAdmin || !tracks[index]) return;
+    setCurrentTrackIndex(index);
+    setIsPlaying(true);
+
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => {});
+    }
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'admin_track_change',
+        payload: { trackIndex: index },
       });
     }
   };
@@ -459,6 +495,16 @@ export function MusicLoungeTab() {
         </div>
 
         <div className="flex items-center gap-2">
+          {inStudio && isAdmin && (
+            <button
+              onClick={() => setShowPlaylistModal((prev) => !prev)}
+              className="px-3 py-1.5 rounded-xl bg-white text-black hover:bg-zinc-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-md"
+            >
+              <Music2 className="w-3.5 h-3.5 text-black" />
+              <span>Select Music ({tracks.length})</span>
+            </button>
+          )}
+
           {inStudio && (
             <button
               onClick={() => setShowQueueModal((prev) => !prev)}
@@ -529,60 +575,138 @@ export function MusicLoungeTab() {
           <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800 bg-black/90 p-4 flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
               <h4 className="text-xs font-black uppercase text-zinc-300 tracking-wider font-mono flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-white" /> Studio Party ({activeUsers.length + 1})
+                <Users className="w-3.5 h-3.5 text-white" /> Studio Party ({activeUsers.length})
               </h4>
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2.5">
-              {/* Current User */}
-              {user && (
-                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-900 border border-zinc-700">
-                  <div className="w-7 h-7 rounded-full overflow-hidden border border-white bg-zinc-800 shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getAvatarUrl(user.avatar_url, user.username)} alt={user.display_name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h5 className="text-xs font-bold text-white truncate flex items-center gap-1">
-                      {user.display_name}
-                      {isAdmin && <Crown className="w-3 h-3 text-white fill-white" />}
-                    </h5>
-                    <span className="text-[9px] text-zinc-400 block font-mono">
-                      {isAdmin ? 'Admin DJ' : 'Party Listener'}
-                    </span>
-                  </div>
+              {activeUsers.length === 0 ? (
+                <div className="p-4 text-center text-xs font-mono text-zinc-500">
+                  Connecting to studio room...
                 </div>
+              ) : (
+                activeUsers.map((m) => {
+                  const isSelf = user?.id === m.id;
+                  const avatarSrc = getAvatarUrl(m.avatar, m.username);
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex items-center gap-2.5 p-2 rounded-xl ${
+                        isSelf ? 'bg-zinc-900 border border-zinc-700' : 'bg-zinc-950 border border-zinc-800/80'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={avatarSrc}
+                          alt={m.displayName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(m.username);
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-xs font-bold text-white truncate flex items-center gap-1">
+                          {m.displayName}
+                          {isSelf && isAdmin && <Crown className="w-3 h-3 text-white fill-white" />}
+                        </h5>
+                        <span className="text-[9px] text-zinc-400 block truncate font-mono">
+                          {isSelf && isAdmin ? 'Admin DJ' : `@${m.username}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
               )}
-
-              {/* Other Active Studio Members */}
-              {activeUsers.map((m) => {
-                const avatarSrc = getAvatarUrl(m.avatar, m.username);
-                return (
-                  <div key={m.id} className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-950 border border-zinc-800/80">
-                    <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={avatarSrc}
-                        alt={m.displayName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(m.username);
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h5 className="text-xs font-bold text-zinc-300 truncate">{m.displayName}</h5>
-                      <span className="text-[9px] text-zinc-500 block truncate">@{m.username}</span>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
           {/* RIGHT MAIN AREA: Dynamic Moving Audio Waveform Spectrum & Live DJ Deck Controls */}
           <div className="flex-1 p-5 flex flex-col items-center justify-between bg-black relative">
             
+            {/* Admin Music Track Selector Modal */}
+            {showPlaylistModal && (
+              <div className="absolute inset-4 z-40 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-4 flex flex-col animate-fadeIn">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
+                  <h4 className="text-xs font-black uppercase text-white font-mono flex items-center gap-2">
+                    <Music2 className="w-4 h-4 text-white" /> Admin DJ Music Library ({tracks.length})
+                  </h4>
+                  <button
+                    onClick={() => setShowPlaylistModal(false)}
+                    className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-lg"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {tracks.length === 0 ? (
+                    <div className="p-8 text-center text-xs font-mono text-zinc-500">
+                      No music uploaded to public.music table yet. Upload tracks in Supabase to expand the Pagpag Party DJ Library!
+                    </div>
+                  ) : (
+                    tracks.map((track, idx) => {
+                      const isCurrent = idx === currentTrackIndex;
+                      return (
+                        <div
+                          key={track.id || idx}
+                          onClick={() => {
+                            handleSelectTrack(idx);
+                            setShowPlaylistModal(false);
+                          }}
+                          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                            isCurrent
+                              ? 'bg-white text-black border-white font-bold shadow-lg'
+                              : 'bg-zinc-900 border-zinc-800 text-white hover:bg-zinc-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-lg overflow-hidden border ${isCurrent ? 'border-black' : 'border-zinc-700'} bg-black shrink-0 flex items-center justify-center`}>
+                              {track.cover ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img src={getAvatarUrl(track.cover, track.artist)} alt={track.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Music2 className={`w-5 h-5 ${isCurrent ? 'text-black' : 'text-zinc-400'}`} />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="text-xs font-bold truncate">{track.title}</h5>
+                              <p className={`text-[10px] truncate ${isCurrent ? 'text-zinc-700' : 'text-zinc-400'}`}>{track.artist} • {track.genre || 'Music'}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isCurrent && isPlaying ? (
+                              <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 bg-black text-white rounded-lg animate-pulse">
+                                PLAYING LIVE
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectTrack(idx);
+                                  setShowPlaylistModal(false);
+                                }}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                  isCurrent
+                                    ? 'bg-black text-white hover:bg-zinc-800'
+                                    : 'bg-white text-black hover:bg-zinc-200'
+                                }`}
+                              >
+                                Play Now
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Song Request Queue Modal Overlay for Admin & Users */}
             {showQueueModal && (
               <div className="absolute inset-4 z-40 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-4 flex flex-col animate-fadeIn">

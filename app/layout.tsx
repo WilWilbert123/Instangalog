@@ -14,7 +14,7 @@ import { RealtimeNotificationToast } from '@/components/notifications/RealtimeNo
 import { IntroSplashScreen } from '@/components/layout/IntroSplashScreen';
 
 export const metadata: Metadata = {
-  title: 'Instangalog | Modern Multimedia Social Network',
+  title: 'Instangalog | Pagpag Lover',
   description: 'An original multimedia social platform for short videos, music streaming, images, status updates, and realtime community chat.',
   keywords: ['instangalog', 'social media', 'short videos', 'music', 'chat', 'pwa'],
   icons: {

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { EditProfileModal } from './EditProfileModal';
 import { ProfileVisitorsModal } from './ProfileVisitorsModal';
-import { ShieldCheck, Edit3, UserCheck, UserPlus, Clock, Eye } from 'lucide-react';
+import { ShieldCheck, Edit3, UserCheck, UserPlus, Clock, Eye, MessageSquare } from 'lucide-react';
 import { PendingPostsModal } from './PendingPostsModal';
 import { getUserPendingPosts } from '@/lib/services/postService';
 
@@ -97,6 +97,14 @@ export function ProfileHeader({ initialProfile, actualPostsCount }: ProfileHeade
       setFollowersCount(res.newFollowersCount);
     }
     setIsFollowLoading(false);
+  };
+
+  const handleMessageUser = () => {
+    if (!user) {
+      openAuthModal(`Sign in to message ${profile.display_name}`);
+      return;
+    }
+    router.push(`/chat?tab=dms&username=${profile.username}`);
   };
 
   const handleProfileUpdated = (updatedProfile: Profile) => {
@@ -191,26 +199,37 @@ export function ProfileHeader({ initialProfile, actualPostsCount }: ProfileHeade
                     <span>Edit Profile</span>
                   </button>
                 ) : (
-                  <button
-                    onClick={handleFollowToggle}
-                    className={`flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 ${
-                      isFollowing
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700'
-                        : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                    }`}
-                  >
-                    {isFollowing ? (
-                      <>
-                        <UserCheck className="w-4 h-4 text-emerald-500" />
-                        <span>Following</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" />
-                        <span>Follow</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleFollowToggle}
+                      className={`flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 ${
+                        isFollowing
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700'
+                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                      }`}
+                    >
+                      {isFollowing ? (
+                        <>
+                          <UserCheck className="w-4 h-4 text-emerald-500" />
+                          <span>Following</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-4 h-4" />
+                          <span>Follow</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleMessageUser}
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-400 text-black shadow-md transition-all active:scale-95"
+                      title={`Send private message to @${profile.username}`}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Message</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

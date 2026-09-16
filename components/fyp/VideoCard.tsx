@@ -19,6 +19,7 @@ interface VideoCardProps {
 }
 
 export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { user, openAuthModal } = useAuthStore();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,21 +29,43 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [isInView, setIsInView] = useState(false);
 
-  const embedInfo = parseMediaUrl(post.video?.video_url || '', { autoplay: isActive, mute: isMuted });
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsInView(entry.isIntersecting && entry.intersectionRatio >= 0.5);
+        });
+      },
+      {
+        threshold: [0, 0.5, 0.8, 1.0],
+      }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const shouldPlay = isActive && isInView;
+
+  const embedInfo = parseMediaUrl(post.video?.video_url || '', { autoplay: shouldPlay, mute: isMuted });
   const isEmbeddable = embedInfo.isEmbeddable;
   const embedSrc = embedInfo.embedUrl;
 
   useEffect(() => {
-    if (isActive && post?.id) {
+    if (shouldPlay && post?.id) {
       recordPostView(post.id, user?.id);
     }
-  }, [isActive, post?.id, user?.id]);
+  }, [shouldPlay, post?.id, user?.id]);
 
   useEffect(() => {
     if (!videoRef.current || hasVideoError || isEmbeddable) return;
 
-    if (isActive) {
+    if (shouldPlay) {
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise
@@ -53,7 +76,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       videoRef.current.pause();
       setIsPlaying(false);
     }
-  }, [isActive, hasVideoError, isEmbeddable]);
+  }, [shouldPlay, hasVideoError, isEmbeddable]);
 
   const togglePlay = () => {
     if (!videoRef.current || hasVideoError || isEmbeddable) return;
@@ -122,18 +145,37 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   };
 
   return (
-    <div className="relative w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
+    <div ref={cardRef} className="relative w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
       {/* Video Element or Embeddable iframe (YouTube, Facebook, TikTok, Instagram, etc.) or Error Poster Fallback */}
       {isEmbeddable ? (
-        <div className="relative w-full h-full bg-black flex items-center justify-center">
-          <iframe
-            src={embedSrc}
-            title={post.caption || `${embedInfo.type} video`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            className="w-full h-full border-0 pointer-events-auto z-10"
-          />
-        </div>
+        shouldPlay ? (
+          <div className="relative w-full h-full bg-black flex items-center justify-center">
+            <iframe
+              src={embedSrc}
+              title={post.caption || `${embedInfo.type} video`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="w-full h-full border-0 pointer-events-auto z-10"
+            />
+          </div>
+        ) : (
+          <div className="relative w-full h-full flex flex-col items-center justify-center bg-slate-900 text-center p-6 space-y-4">
+            {(post.video?.thumbnail_url || embedInfo.thumbnailUrl) && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={post.video?.thumbnail_url || embedInfo.thumbnailUrl || ''}
+                alt={post.caption || 'Video preview'}
+                className="absolute inset-0 w-full h-full object-cover opacity-60"
+              />
+            )}
+            <div className="relative z-10 p-4 rounded-2xl bg-black/70 backdrop-blur-md border border-white/10 max-w-xs space-y-2">
+              <div className="w-12 h-12 mx-auto rounded-full bg-white/20 text-white flex items-center justify-center border border-white/30 shadow-lg">
+                <Play className="w-6 h-6 fill-white translate-x-0.5" />
+              </div>
+              <p className="text-xs font-bold text-white">Tap to Play</p>
+            </div>
+          </div>
+        )
       ) : !hasVideoError && post.video?.video_url ? (
         <video
           ref={videoRef}
