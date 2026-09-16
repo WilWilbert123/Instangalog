@@ -185,6 +185,24 @@ body {
   animation: floatUpReaction 2s ease-out forwards;
 }
 
+@keyframes floatUpSlow {
+  0% {
+    transform: translateY(0) scale(0.9);
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-280px) scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-floatUpSlow {
+  animation: floatUpSlow 4.5s ease-out forwards;
+}
+
 .animate-equalizer {
   animation: equalizer 0.8s ease-in-out infinite;
 }

@@ -224,6 +224,21 @@ export function MusicLoungeTab() {
           fetchSongRequestsQueue();
         }
       })
+      .on('broadcast', { event: 'vibe_reaction' }, (payload) => {
+        const { type, x } = payload.payload || {};
+        if (type) {
+          const newVibe: FloatingVibe = {
+            id: `vibe-${Date.now()}-${Math.random()}`,
+            type,
+            x: typeof x === 'number' ? x : Math.floor(Math.random() * 60) + 20,
+          };
+          setFloatingVibes((prev) => [...prev, newVibe]);
+
+          setTimeout(() => {
+            setFloatingVibes((prev) => prev.filter((v) => v.id !== newVibe.id));
+          }, 2200);
+        }
+      })
       .on('broadcast', { event: 'admin_track_change' }, (payload) => {
         const { trackIndex } = payload.payload || {};
         if (typeof trackIndex === 'number' && tracks[trackIndex]) {
@@ -279,9 +294,10 @@ export function MusicLoungeTab() {
       return;
     }
     setInStudio(true);
+    setIsPlaying(true);
     setTimeout(() => {
-      if (audioRef.current && currentTrack) {
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      if (audioRef.current && !isEmbeddableTrack) {
+        audioRef.current.play().catch(() => {});
       }
     }, 250);
   };
@@ -293,13 +309,17 @@ export function MusicLoungeTab() {
 
   // 7. Admin DJ Controls (Shuffle, Repeat, Next, Prev, Play/Pause)
   const togglePlay = () => {
-    if (!isAdmin) return;
-    if (!audioRef.current || !currentTrack) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    if (!isAdmin || !currentTrack) return;
+
+    const nextState = !isPlaying;
+    setIsPlaying(nextState);
+
+    if (!isEmbeddableTrack && audioRef.current) {
+      if (nextState) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
     }
   };
 
@@ -347,7 +367,9 @@ export function MusicLoungeTab() {
     setCurrentTrackIndex(index);
     setIsPlaying(true);
 
-    if (audioRef.current) {
+    const targetTrack = tracks[index];
+    const parsed = parseMediaUrl(targetTrack.url);
+    if (!parsed.isEmbeddable && audioRef.current) {
       audioRef.current.play().catch(() => {});
     }
 
@@ -430,16 +452,29 @@ export function MusicLoungeTab() {
 
   // 9. Trigger React Vibe Floating Animation
   const triggerReaction = (type: 'fire' | 'love' | 'vibe' | 'pagpag') => {
-    const newVibe: FloatingVibe = {
-      id: `vibe-${Date.now()}-${Math.random()}`,
-      type,
-      x: Math.floor(Math.random() * 60) + 20,
-    };
-    setFloatingVibes((prev) => [...prev, newVibe]);
+    const xPos = Math.floor(Math.random() * 60) + 20;
 
-    setTimeout(() => {
-      setFloatingVibes((prev) => prev.filter((v) => v.id !== newVibe.id));
-    }, 2200);
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'vibe_reaction',
+        payload: {
+          type,
+          x: xPos,
+        },
+      });
+    } else {
+      const newVibe: FloatingVibe = {
+        id: `vibe-${Date.now()}-${Math.random()}`,
+        type,
+        x: xPos,
+      };
+      setFloatingVibes((prev) => [...prev, newVibe]);
+
+      setTimeout(() => {
+        setFloatingVibes((prev) => prev.filter((v) => v.id !== newVibe.id));
+      }, 2200);
+    }
   };
 
   return (
@@ -818,9 +853,9 @@ export function MusicLoungeTab() {
             {currentTrack ? (
               <div className="flex items-center gap-3 w-full p-2.5 rounded-2xl bg-zinc-900 border border-zinc-800 mb-3">
                 <div className={`w-12 h-12 rounded-xl overflow-hidden border border-zinc-700 bg-black shrink-0 relative ${isPlaying ? 'animate-pulse' : ''}`}>
-                  {currentTrack.cover ? (
+                  {currentTrack.cover || currentEmbed?.thumbnailUrl ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={getAvatarUrl(currentTrack.cover, currentTrack.artist)} alt={currentTrack.title} className="w-full h-full object-cover" />
+                    <img src={currentTrack.cover || currentEmbed?.thumbnailUrl || getAvatarUrl('', currentTrack.artist)} alt={currentTrack.title} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Music2 className="w-6 h-6 text-zinc-500" />
