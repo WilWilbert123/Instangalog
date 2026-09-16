@@ -193,14 +193,14 @@ export async function getUserPosts(userId: string): Promise<Post[]> {
       .eq('moderation_status', 'approved')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
+    if (!error && data && data.length > 0) {
       return data as unknown as Post[];
     }
   } catch {
     // Fallback
   }
 
-  return [];
+  return MOCK_POSTS.filter((p) => p.user_id === userId && p.moderation_status === 'approved');
 }
 
 export async function getAllProfiles(): Promise<Profile[]> {
