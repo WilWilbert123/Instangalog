@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 interface DMUser {
   id: string;
@@ -49,6 +50,10 @@ function formatMessageTime(isoString?: string): string {
 
 export function DirectMessagesTab() {
   const { user, openAuthModal } = useAuthStore();
+  const searchParams = useSearchParams();
+  const targetUsername = searchParams?.get('username');
+  const targetUserIdParam = searchParams?.get('user') || searchParams?.get('targetId');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [conversations, setConversations] = useState<DMUser[]>([]);
   const [selectedContact, setSelectedContact] = useState<DMUser | null>(null);
@@ -66,6 +71,45 @@ export function DirectMessagesTab() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const userId = user?.id;
+
+  // Auto-select user if targetUsername or targetUserIdParam is passed in URL
+  useEffect(() => {
+    if (!targetUsername && !targetUserIdParam) return;
+
+    async function autoSelectUserFromUrl() {
+      try {
+        const queryTerm = targetUsername || targetUserIdParam || '';
+        const res = await fetch(`/api/dms/users?q=${encodeURIComponent(queryTerm)}`);
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.users) && data.users.length > 0) {
+          const match = data.users.find(
+            (u: any) =>
+              u.username.toLowerCase() === targetUsername?.toLowerCase() ||
+              u.id === targetUserIdParam
+          ) || data.users[0];
+
+          const contactToSelect: DMUser = {
+            id: match.id,
+            username: match.username || 'member',
+            displayName: match.display_name || match.username || 'User',
+            avatar: match.avatar_url || '',
+            role: match.role,
+          };
+
+          setSelectedContact(contactToSelect);
+
+          setConversations((prev) => {
+            if (prev.some((c) => c.id === contactToSelect.id)) return prev;
+            return [contactToSelect, ...prev];
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    autoSelectUserFromUrl();
+  }, [targetUsername, targetUserIdParam]);
 
   // 1. Fetch Recent Conversations for Current User (Sorted by latest message at top)
   const fetchRecentConversations = useCallback(async () => {
