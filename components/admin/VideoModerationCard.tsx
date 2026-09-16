@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
+import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 
 interface VideoModerationCardProps {
   post: Post;
@@ -125,65 +126,67 @@ export function VideoModerationCard({ post, onModerated }: VideoModerationCardPr
           {/* Media Player Container */}
           <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-800 group shadow-inner">
             {/* VIDEO POST */}
-            {post.type === 'video' && post.video && (
-              <>
-                {post.video.video_url.includes('youtube.com') || post.video.video_url.includes('youtu.be') ? (
-                  <iframe
-                    src={post.video.video_url}
-                    title={post.caption || 'YouTube Video'}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-full border-0"
-                  />
-                ) : !hasVideoError ? (
-                  <video
-                    ref={videoRef}
-                    src={post.video.video_url}
-                    poster={post.video.thumbnail_url}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onError={() => setHasVideoError(true)}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="relative w-full h-full flex flex-col items-center justify-center p-4 text-center bg-slate-900 text-white">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={post.video.thumbnail_url}
-                      alt={post.caption}
-                      className="absolute inset-0 w-full h-full object-cover opacity-30"
+            {post.type === 'video' && post.video && (() => {
+              const embedInfo = parseMediaUrl(post.video.video_url, { autoplay: false, mute: false });
+              return (
+                <>
+                  {embedInfo.isEmbeddable ? (
+                    <iframe
+                      src={embedInfo.embedUrl}
+                      title={post.caption || 'Video Embed'}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="w-full h-full border-0 z-10"
                     />
-                    <div className="relative z-10 space-y-2">
-                      <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                      <p className="text-xs font-bold">Video Preview Stream</p>
-                      <a
-                        href={post.video.video_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-block px-3 py-1.5 text-[11px] font-bold rounded-lg bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 transition-colors"
-                      >
-                        Open Direct Video Link ↗
-                      </a>
+                  ) : !hasVideoError ? (
+                    <video
+                      ref={videoRef}
+                      src={post.video.video_url}
+                      poster={post.video.thumbnail_url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onError={() => setHasVideoError(true)}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="relative w-full h-full flex flex-col items-center justify-center p-4 text-center bg-slate-900 text-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={post.video.thumbnail_url}
+                        alt={post.caption}
+                        className="absolute inset-0 w-full h-full object-cover opacity-30"
+                      />
+                      <div className="relative z-10 space-y-2">
+                        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                        <p className="text-xs font-bold">Video Stream Preview</p>
+                        <a
+                          href={post.video.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block px-3 py-1.5 text-[11px] font-bold rounded-lg bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 transition-colors"
+                        >
+                          Open Video Link ↗
+                        </a>
+                      </div>
                     </div>
+                  )}
+                  {/* Overlays */}
+                  <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    <button
+                      onClick={() => setIsPreviewOpen(true)}
+                      className="p-1.5 rounded-lg bg-black/70 hover:bg-black text-white text-xs font-bold flex items-center gap-1 backdrop-blur-md transition-colors"
+                      title="Fullscreen Preview"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      <span>Expand</span>
+                    </button>
                   </div>
-                )}
-
-                {/* Overlays */}
-                <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                  <button
-                    onClick={() => setIsPreviewOpen(true)}
-                    className="p-1.5 rounded-lg bg-black/70 hover:bg-black text-white text-xs font-bold flex items-center gap-1 backdrop-blur-md transition-colors"
-                    title="Fullscreen Preview"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    <span>Expand</span>
-                  </button>
-                </div>
-              </>
-            )}
+                </>
+              );
+            })()}
 
             {/* IMAGE POST */}
             {post.type === 'image' && post.image && (

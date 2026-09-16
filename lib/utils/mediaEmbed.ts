@@ -44,6 +44,61 @@ export function parseMediaUrl(
   const autoplay = options?.autoplay ?? true;
   const mute = options?.mute ?? true;
 
+  // 0. Check if URL is ALREADY an embed plugin URL to avoid double-encoding
+  if (cleanUrl.includes('facebook.com/plugins/video.php')) {
+    return {
+      isEmbeddable: true,
+      isDirectVideo: false,
+      isDirectAudio: false,
+      isDirectImage: false,
+      type: 'facebook',
+      embedUrl: cleanUrl,
+      rawUrl: cleanUrl,
+      thumbnailUrl: null,
+    };
+  }
+
+  if (cleanUrl.includes('youtube.com/embed/')) {
+    const match = cleanUrl.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+    const videoId = match ? match[1] : null;
+    return {
+      isEmbeddable: true,
+      isDirectVideo: false,
+      isDirectAudio: false,
+      isDirectImage: false,
+      type: 'youtube',
+      embedUrl: cleanUrl,
+      rawUrl: cleanUrl,
+      thumbnailUrl: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null,
+    };
+  }
+
+  if (cleanUrl.includes('instagram.com/') && cleanUrl.endsWith('/embed')) {
+    return {
+      isEmbeddable: true,
+      isDirectVideo: false,
+      isDirectAudio: false,
+      isDirectImage: false,
+      type: 'instagram',
+      embedUrl: cleanUrl,
+      rawUrl: cleanUrl,
+      thumbnailUrl: null,
+    };
+  }
+
+  if (cleanUrl.includes('tiktok.com/embed/')) {
+    return {
+      isEmbeddable: true,
+      isDirectVideo: false,
+      isDirectAudio: false,
+      isDirectImage: false,
+      type: 'tiktok',
+      embedUrl: cleanUrl,
+      rawUrl: cleanUrl,
+      thumbnailUrl: null,
+    };
+  }
+
   // 1. YouTube
   const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|&v=)([^#&?]*).*/i;
   const ytMatch = cleanUrl.match(ytRegExp);
@@ -63,7 +118,7 @@ export function parseMediaUrl(
     };
   }
 
-  // 2. Facebook Videos & Reels (facebook.com/watch, fb.watch, facebook.com/reel, facebook.com/.../videos/)
+  // 2. Facebook Videos & Reels
   if (/facebook\.com|fb\.watch|fb\.com/i.test(cleanUrl)) {
     const autoplayParam = autoplay ? '1' : '0';
     return {
@@ -78,7 +133,7 @@ export function parseMediaUrl(
     };
   }
 
-  // 3. Instagram Reels & Posts (instagram.com/reel/CODE, instagram.com/p/CODE)
+  // 3. Instagram Reels & Posts
   const igMatch = cleanUrl.match(/instagram\.com\/(?:reel|p)\/([a-zA-Z0-9_-]+)/i);
   if (igMatch) {
     const code = igMatch[1];
@@ -106,7 +161,7 @@ export function parseMediaUrl(
     };
   }
 
-  // 4. TikTok Videos (tiktok.com/@user/video/ID, vm.tiktok.com/CODE, vt.tiktok.com/CODE)
+  // 4. TikTok Videos
   const ttMatch = cleanUrl.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/i) || cleanUrl.match(/tiktok\.com\/v\/(\d+)/i);
   if (ttMatch) {
     const videoId = ttMatch[1];
@@ -225,7 +280,7 @@ export function parseMediaUrl(
     };
   }
 
-  // 11. Direct Video URLs (.mp4, .webm, .mov, .m3u8, Cloudinary video, Google Cloud Storage, Firebase)
+  // 11. Direct Video URLs
   if (
     /\.(mp4|webm|mov|m3u8|ogv)($|\?)/i.test(cleanUrl) ||
     /commondatastorage|cloudinary\.com\/.*\/video|firebasestorage|amazonaws\.com/i.test(cleanUrl)
@@ -253,4 +308,13 @@ export function parseMediaUrl(
     rawUrl: cleanUrl,
     thumbnailUrl: null,
   };
+}
+
+export function detectPostTypeFromUrl(url: string): 'video' | 'image' | 'music' | null {
+  if (!url || typeof url !== 'string' || !url.trim().startsWith('http')) return null;
+  const parsed = parseMediaUrl(url);
+  if (parsed.isDirectImage) return 'image';
+  if (parsed.isDirectAudio || parsed.type === 'soundcloud' || parsed.type === 'spotify') return 'music';
+  if (parsed.isEmbeddable || parsed.isDirectVideo || parsed.type === 'youtube' || parsed.type === 'facebook' || parsed.type === 'instagram' || parsed.type === 'tiktok' || parsed.type === 'vimeo' || parsed.type === 'dailymotion') return 'video';
+  return null;
 }

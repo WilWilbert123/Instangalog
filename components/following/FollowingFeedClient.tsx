@@ -5,7 +5,7 @@ import { Post, PostType } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { createPost, togglePostLike } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
-import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
+import { parseMediaUrl, detectPostTypeFromUrl } from '@/lib/utils/mediaEmbed';
 import { uploadMediaToCloudinary } from '@/lib/services/cloudinary';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { MusicCard } from '@/components/music/MusicCard';
@@ -108,6 +108,16 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
     }
   };
 
+  const handleMediaUrlChange = (val: string) => {
+    setMediaUrl(val);
+    if (val.trim()) {
+      const detected = detectPostTypeFromUrl(val);
+      if (detected) {
+        setPostType(detected);
+      }
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -166,11 +176,8 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
         }
       } else if (postType === 'video' && finalMediaUrl) {
         const media = parseMediaUrl(finalMediaUrl);
-        if (media.embedUrl) {
-          finalMediaUrl = media.embedUrl;
-          if (media.thumbnailUrl) {
-            finalThumbnailUrl = media.thumbnailUrl;
-          }
+        if (media.thumbnailUrl) {
+          finalThumbnailUrl = media.thumbnailUrl;
         }
       }
 
@@ -217,7 +224,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             ? (() => {
                 const media = parseMediaUrl(finalMediaUrl);
                 return {
-                  audio_url: media.embedUrl || finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+                  audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
                   cover_url: media.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
                   title: caption.trim() || selectedFile?.name || 'New Track',
                   artist: user.display_name,
@@ -234,19 +241,20 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             : undefined,
       });
 
-      if (created) {
-        if (created.moderation_status === 'approved') {
-          setPosts((prev) => [created, ...prev]);
-        }
-        setCaption('');
-        setMediaUrl('');
-        setHashtags('');
-        clearSelectedFile();
-        setShowSuccessNotice(true);
-        setTimeout(() => setShowSuccessNotice(false), 7000);
+      // Prepend newly created post into local list
+      if (postType !== 'video' || user.role === 'admin') {
+        setPosts((prev) => [created, ...prev]);
       }
+
+      // Reset form
+      setCaption('');
+      setMediaUrl('');
+      setHashtags('');
+      clearSelectedFile();
+      setShowSuccessNotice(true);
+      setTimeout(() => setShowSuccessNotice(false), 5000);
     } catch (err: any) {
-      alert(err?.message || 'Error creating post.');
+      alert(`Publishing failed: ${err.message || 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
       setUploadProgress(null);
@@ -410,19 +418,67 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
               )}
 
               {!selectedFile && (
-                <input
-                  type="url"
-                  value={mediaUrl}
-                  onChange={(e) => setMediaUrl(e.target.value)}
-                  placeholder={
-                    postType === 'video'
-                      ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Video URL'
-                      : postType === 'music'
-                      ? 'Paste YouTube URL (e.g. https://youtu.be/...) or Audio URL'
-                      : 'Paste Direct Image URL'
-                  }
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
-                />
+                <div className="space-y-2">
+                  <input
+                    type="url"
+                    value={mediaUrl}
+                    onChange={(e) => handleMediaUrlChange(e.target.value)}
+                    placeholder={
+                      postType === 'video'
+                        ? 'Paste Video URL (YouTube, Facebook, TikTok, Instagram, Direct MP4)'
+                        : postType === 'music'
+                        ? 'Paste Audio/Music URL (SoundCloud, Spotify, MP3) or Video'
+                        : 'Paste Image URL (Direct JPG/PNG, Unsplash, Imgur)'
+                    }
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white transition-colors"
+                  />
+
+                  {mediaUrl.trim() && (
+                    <div className="rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-800 bg-black/40 p-2.5 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
+                        <span className="flex items-center gap-1.5 text-emerald-400">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Detected: {postType.toUpperCase()}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMediaUrl('')}
+                          className="hover:text-white text-slate-400 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      </div>
+
+                      {postType === 'video' && (
+                        <FeedVideoPlayer videoUrl={mediaUrl.trim()} caption="Live Video Preview" />
+                      )}
+
+                      {postType === 'image' && (
+                        <div className="relative max-h-56 rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-800">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={mediaUrl.trim()}
+                            alt="Media Preview"
+                            className="max-h-56 object-contain"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).alt = 'Unable to load image preview';
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {postType === 'music' && (
+                        <div className="p-3 rounded-xl bg-slate-900 text-white flex items-center gap-3 border border-slate-800">
+                          <Music className="w-6 h-6 text-emerald-400 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold truncate">{caption || 'Pasted Audio Track'}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{mediaUrl}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
