@@ -131,3 +131,66 @@ body {
   animation: slideRight 0.5s ease-out forwards;
 }
 
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-40px) scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes floatUpReaction {
+  0% {
+    transform: translateY(0) scale(0.6) rotate(-10deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-120px) scale(1.4) rotate(10deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-240px) scale(1) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+@keyframes equalizer {
+  0%, 100% {
+    height: 12px;
+  }
+  50% {
+    height: 48px;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-floatUp {
+  animation: floatUp 0.8s ease-out forwards;
+}
+
+.animate-floatUpReaction {
+  animation: floatUpReaction 2s ease-out forwards;
+}
+
+.animate-equalizer {
+  animation: equalizer 0.8s ease-in-out infinite;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+
