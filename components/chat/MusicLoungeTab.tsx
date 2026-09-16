@@ -159,32 +159,20 @@ export function MusicLoungeTab() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/dms/users?q=')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.success && Array.isArray(data.users)) {
-          const members: StudioParticipant[] = data.users.map((u: any) => ({
-            id: u.id,
-            username: u.username || 'member',
-            displayName: u.display_name || u.username || 'Rocker',
-            avatar: u.avatar_url || '',
-          }));
-          setActiveUsers(members);
-        }
-      })
-      .catch(() => {});
-
     fetchSongRequestsQueue();
   }, [fetchSongRequestsQueue]);
 
   const currentTrack = tracks[currentTrackIndex] || null;
 
-  // 3. Supabase Realtime WebSocket Connection for Pagpag Party Studio
+  // 3. Supabase Realtime WebSocket Connection with Presence for Pagpag Party Studio
   useEffect(() => {
-    if (!inStudio) return;
+    if (!inStudio || !user) return;
 
     const channel = supabase.channel(PARTY_STUDIO_CHANNEL, {
       config: {
+        presence: {
+          key: user.id,
+        },
         broadcast: { self: true },
       },
     });
@@ -192,6 +180,25 @@ export function MusicLoungeTab() {
     channelRef.current = channel;
 
     channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const presenceParticipants: StudioParticipant[] = [];
+
+        Object.keys(state).forEach((key) => {
+          const presences = state[key] as any[];
+          if (presences && presences.length > 0) {
+            const p = presences[0];
+            presenceParticipants.push({
+              id: p.user_id || key,
+              username: p.username || 'member',
+              displayName: p.displayName || p.username || 'Listener',
+              avatar: p.avatar || '',
+            });
+          }
+        });
+
+        setActiveUsers(presenceParticipants);
+      })
       .on('broadcast', { event: 'song_request' }, (payload) => {
         const { username, displayName, songTitle } = payload.payload || {};
         if (songTitle) {
@@ -218,13 +225,23 @@ export function MusicLoungeTab() {
           setIsPlaying(true);
         }
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: user.id,
+            username: user.username,
+            displayName: user.display_name,
+            avatar: user.avatar_url,
+          });
+        }
+      });
 
     return () => {
+      channel.untrack();
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [inStudio, tracks, fetchSongRequestsQueue]);
+  }, [inStudio, user, tracks, fetchSongRequestsQueue]);
 
   // 4. Audio Event Listeners for Live Time Update
   const handleTimeUpdate = () => {
@@ -529,54 +546,51 @@ export function MusicLoungeTab() {
           <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-zinc-800 bg-black/90 p-4 flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 mb-3">
               <h4 className="text-xs font-black uppercase text-zinc-300 tracking-wider font-mono flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-white" /> Studio Party ({activeUsers.length + 1})
+                <Users className="w-3.5 h-3.5 text-white" /> Studio Party ({activeUsers.length})
               </h4>
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2.5">
-              {/* Current User */}
-              {user && (
-                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-900 border border-zinc-700">
-                  <div className="w-7 h-7 rounded-full overflow-hidden border border-white bg-zinc-800 shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getAvatarUrl(user.avatar_url, user.username)} alt={user.display_name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h5 className="text-xs font-bold text-white truncate flex items-center gap-1">
-                      {user.display_name}
-                      {isAdmin && <Crown className="w-3 h-3 text-white fill-white" />}
-                    </h5>
-                    <span className="text-[9px] text-zinc-400 block font-mono">
-                      {isAdmin ? 'Admin DJ' : 'Party Listener'}
-                    </span>
-                  </div>
+              {activeUsers.length === 0 ? (
+                <div className="p-4 text-center text-xs font-mono text-zinc-500">
+                  Connecting to studio room...
                 </div>
+              ) : (
+                activeUsers.map((m) => {
+                  const isSelf = user?.id === m.id;
+                  const avatarSrc = getAvatarUrl(m.avatar, m.username);
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex items-center gap-2.5 p-2 rounded-xl ${
+                        isSelf ? 'bg-zinc-900 border border-zinc-700' : 'bg-zinc-950 border border-zinc-800/80'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={avatarSrc}
+                          alt={m.displayName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(m.username);
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-xs font-bold text-white truncate flex items-center gap-1">
+                          {m.displayName}
+                          {isSelf && isAdmin && <Crown className="w-3 h-3 text-white fill-white" />}
+                        </h5>
+                        <span className="text-[9px] text-zinc-400 block truncate font-mono">
+                          {isSelf && isAdmin ? 'Admin DJ' : `@${m.username}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
               )}
-
-              {/* Other Active Studio Members */}
-              {activeUsers.map((m) => {
-                const avatarSrc = getAvatarUrl(m.avatar, m.username);
-                return (
-                  <div key={m.id} className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-950 border border-zinc-800/80">
-                    <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={avatarSrc}
-                        alt={m.displayName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(m.username);
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h5 className="text-xs font-bold text-zinc-300 truncate">{m.displayName}</h5>
-                      <span className="text-[9px] text-zinc-500 block truncate">@{m.username}</span>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
