@@ -1183,22 +1183,23 @@ export function MusicLoungeTab() {
               </div>
 
               {/* Dynamic 44-Bar Moving Audio Spectrum Visualizer */}
-              <div className="w-full flex items-center justify-center gap-1 h-16 px-2">
+              <div className="w-full flex items-end justify-center gap-[3px] h-16 px-2 py-1">
                 {Array.from({ length: 44 }).map((_, i) => {
-                  // Parametric wave height math matching high-tech frequency curves
-                  const waveBase = Math.sin((i / 44) * Math.PI) * 40;
-                  const dynamicOffset = isPlaying ? Math.floor(Math.random() * 24) : 0;
-                  const height = isPlaying ? Math.max(8, Math.min(56, waveBase + dynamicOffset)) : 6;
+                  const norm = Math.sin((i / 43) * Math.PI);
+                  const height = Math.max(8, Math.floor(norm * 52));
+                  const duration = 0.5 + (i % 7) * 0.11;
+                  const delay = (i % 11) * 0.07;
 
                   return (
                     <div
                       key={i}
-                      className={`w-1 rounded-full bg-white transition-all duration-150 shadow-[0_0_6px_rgba(255,255,255,0.4)] ${
-                        isPlaying ? 'opacity-90' : 'opacity-25'
+                      className={`w-1 rounded-full bg-white transition-opacity duration-300 shadow-[0_0_8px_rgba(255,255,255,0.6)] ${
+                        isPlaying ? 'animate-spectrumBounce opacity-100' : 'opacity-30'
                       }`}
                       style={{
                         height: `${height}px`,
-                        animationDelay: `${(i % 8) * 0.08}s`,
+                        animationDuration: `${duration}s`,
+                        animationDelay: `${delay}s`,
                       }}
                     />
                   );
