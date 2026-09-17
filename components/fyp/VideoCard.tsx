@@ -11,6 +11,7 @@ import { ReportModal } from '@/components/modals/ReportModal';
 
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { recordPostView } from '@/lib/services/viewService';
+import { supabase } from '@/lib/supabase/client';
 
 interface VideoCardProps {
   post: Post;
@@ -25,11 +26,46 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [likesCount, setLikesCount] = useState(post.likes_count || 0);
+  const [commentsCount, setCommentsCount] = useState(post.comments_count || 0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    setLikesCount(post.likes_count || 0);
+    setCommentsCount(post.comments_count || 0);
+  }, [post.likes_count, post.comments_count]);
+
+  useEffect(() => {
+    if (!post?.id) return;
+    const channel = supabase
+      .channel(`realtime-videocard-${post.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+          filter: `id=eq.${post.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (updated && typeof updated.comments_count === 'number') {
+            setCommentsCount(updated.comments_count);
+          }
+          if (updated && typeof updated.likes_count === 'number') {
+            setLikesCount(updated.likes_count);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [post.id]);
 
   useEffect(() => {
     const el = cardRef.current;
@@ -101,11 +137,22 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
       openAuthModal('Sign in to like videos');
       return;
     }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      return;
+    }
     const nextState = !isLiked;
     setIsLiked(nextState);
     setLikesCount((prev) => (nextState ? prev + 1 : Math.max(0, prev - 1)));
 
-    await togglePostLike(post.id, user.id, isLiked);
+    try {
+      await togglePostLike(post.id, user.id, isLiked);
+    } catch (err: any) {
+      // Revert optimistic update if failed
+      setIsLiked(isLiked);
+      setLikesCount((prev) => (isLiked ? prev + 1 : Math.max(0, prev - 1)));
+      alert(err?.message || 'Failed to like post.');
+    }
   };
 
   const handleFollow = (e: React.MouseEvent) => {
@@ -319,7 +366,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
             <MessageCircle className="w-4 h-4 sm:w-6 sm:h-6" />
           </button>
           <span className="text-[9px] sm:text-xs font-black text-white drop-shadow-md bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full border border-white/10">
-            {post.comments_count.toLocaleString()}
+            {commentsCount.toLocaleString()}
           </span>
         </div>
 

@@ -13,6 +13,6 @@ export async function POST(request: NextRequest) {
     const isLiked = await togglePostLike(postId, userId, currentlyLiked);
     return NextResponse.json({ success: true, isLiked });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to toggle like' }, { status: 500 });
+    return NextResponse.json({ error: err?.message || 'Failed to toggle like' }, { status: 403 });
   }
 }
