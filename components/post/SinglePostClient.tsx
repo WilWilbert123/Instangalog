@@ -236,6 +236,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
       {activeCommentPostId && (
         <CommentDrawer
           postId={activeCommentPostId}
+          postAuthorId={post.user_id || post.author?.id}
           onClose={() => setActiveCommentPostId(null)}
           onCommentAdded={(_pId, count) => setCommentsCount(count)}
         />

@@ -454,6 +454,7 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
       {activeCommentPostId && (
         <CommentDrawer
           postId={activeCommentPostId}
+          postAuthorId={posts.find((p) => p.id === activeCommentPostId)?.user_id || posts.find((p) => p.id === activeCommentPostId)?.author?.id}
           onClose={() => setActiveCommentPostId(null)}
           onCommentAdded={(pId, count) => {
             setCommentsCountMap((prev) => ({ ...prev, [pId]: count }));

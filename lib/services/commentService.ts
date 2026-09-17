@@ -79,20 +79,60 @@ export async function addComment(postId: string, userId: string, content: string
       if (post) {
         await (supabaseAdmin as any).from('posts').update({ comments_count: (post.comments_count || 0) + 1 }).eq('id', postId);
 
-        // 2. Notify post uploader if commenter is not uploader
-        if (post.user_id && post.user_id !== validUserId) {
-          const { data: actorProf } = await (supabaseAdmin as any).from('profiles').select('display_name, username').eq('id', validUserId).maybeSingle();
-          const actorName = actorProf?.display_name || (actorProf?.username ? `@${actorProf.username}` : 'Someone');
+        const { data: actorProf } = await (supabaseAdmin as any).from('profiles').select('display_name, username').eq('id', validUserId).maybeSingle();
+        const actorName = actorProf?.display_name || (actorProf?.username ? `@${actorProf.username}` : 'Someone');
+        const isPostOwner = post.user_id === validUserId;
+        const truncatedContent = content.length > 30 ? content.slice(0, 30) + '...' : content;
 
-          await (supabaseAdmin as any).from('notifications').insert({
-            user_id: post.user_id,
-            actor_id: validUserId,
-            type: 'comment',
-            post_id: postId,
-            comment_id: commentRecord.id,
-            message: `${actorName} commented: "${content.length > 30 ? content.slice(0, 30) + '...' : content}"`,
-            is_read: false,
-          });
+        if (parentId) {
+          // Reply to a comment
+          const { data: parentComment } = await (supabaseAdmin as any)
+            .from('comments')
+            .select('user_id, content')
+            .eq('id', parentId)
+            .maybeSingle();
+
+          if (parentComment && parentComment.user_id && parentComment.user_id !== validUserId) {
+            const replyMsg = isPostOwner
+              ? `${actorName} (Author) replied to your comment: "${truncatedContent}"`
+              : `${actorName} replied to your comment: "${truncatedContent}"`;
+
+            await (supabaseAdmin as any).from('notifications').insert({
+              user_id: parentComment.user_id,
+              actor_id: validUserId,
+              type: 'comment',
+              post_id: postId,
+              comment_id: commentRecord.id,
+              message: replyMsg,
+              is_read: false,
+            });
+          }
+
+          // If the post owner is not the commenter AND not the parent commenter, notify post owner too
+          if (post.user_id && post.user_id !== validUserId && post.user_id !== parentComment?.user_id) {
+            await (supabaseAdmin as any).from('notifications').insert({
+              user_id: post.user_id,
+              actor_id: validUserId,
+              type: 'comment',
+              post_id: postId,
+              comment_id: commentRecord.id,
+              message: `${actorName} commented: "${truncatedContent}"`,
+              is_read: false,
+            });
+          }
+        } else {
+          // Top level comment
+          if (post.user_id && post.user_id !== validUserId) {
+            await (supabaseAdmin as any).from('notifications').insert({
+              user_id: post.user_id,
+              actor_id: validUserId,
+              type: 'comment',
+              post_id: postId,
+              comment_id: commentRecord.id,
+              message: `${actorName} commented: "${truncatedContent}"`,
+              is_read: false,
+            });
+          }
         }
       }
 
