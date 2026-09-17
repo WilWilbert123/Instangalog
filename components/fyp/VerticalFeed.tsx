@@ -60,6 +60,7 @@ export function VerticalFeed({ posts }: VerticalFeedProps) {
       {activeCommentPostId && (
         <CommentDrawer
           postId={activeCommentPostId}
+          postAuthorId={posts.find((p) => p.id === activeCommentPostId)?.user_id || posts.find((p) => p.id === activeCommentPostId)?.author?.id}
           onClose={() => setActiveCommentPostId(null)}
         />
       )}
