@@ -63,7 +63,7 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
   return (
     <div
       ref={containerRef}
-      className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 shadow-inner group flex items-center justify-center"
+      className="relative aspect-[4/3] sm:aspect-video max-h-[440px] sm:max-h-[520px] w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 shadow-inner group flex items-center justify-center"
     >
       {embedInfo.isEmbeddable ? (
         isVisible ? (
@@ -113,7 +113,7 @@ export function FeedVideoPlayer({ videoUrl, thumbnailUrl, caption }: FeedVideoPl
           muted={isMuted}
           loop
           playsInline
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain bg-black"
         />
       )}
     </div>
