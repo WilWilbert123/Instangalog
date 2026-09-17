@@ -72,16 +72,26 @@ export default function AdminChatPage() {
     if (!confirm('Are you sure you want to delete this chat message?')) return;
 
     setDeletingId(id);
-    const success = await deleteChatMessage(id);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
 
-    if (success) {
-      setMessages((prev) => prev.filter((m) => m.id !== id));
-      setNotice('Message deleted successfully.');
-      setTimeout(() => setNotice(null), 4000);
-    } else {
-      alert('Failed to delete chat message. Please try again.');
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        setNotice('Message deleted successfully.');
+        setTimeout(() => setNotice(null), 4000);
+      } else {
+        alert(data?.error || 'Failed to delete chat message. Please try again.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete chat message. Please try again.');
+    } finally {
+      setDeletingId(null);
     }
-    setDeletingId(null);
   };
 
   const filteredMessages = messages.filter((m) => {
@@ -152,8 +162,8 @@ export default function AdminChatPage() {
         )}
       </div>
 
-      {/* Messages List Container */}
-      <div className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white shadow-xl space-y-3">
+      {/* Messages List Container - Fixed Height Scrollable Stream */}
+      <div className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white shadow-xl max-h-[600px] overflow-y-auto space-y-3 hide-scrollbar">
         {loading ? (
           <div className="py-16 text-center space-y-3">
             <Loader2 className="w-8 h-8 text-purple-500 animate-spin mx-auto" />
