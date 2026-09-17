@@ -134,7 +134,7 @@ export function CommentItem({ comment, postAuthorId, isNested = false, onReply }
 
         {/* Facebook-style Nested Replies Thread */}
         {comment.replies && comment.replies.length > 0 && (
-          <div className="space-y-3 pt-2.5 pl-3 border-l-2 border-indigo-500/20 dark:border-indigo-500/30 ml-3.5 mt-2">
+          <div className="space-y-3 pt-2.5 pl-3.5 border-l-2 border-indigo-500/30 dark:border-indigo-500/40 ml-6 sm:ml-8 mt-2.5">
             {comment.replies.map((reply) => (
               <CommentItem
                 key={reply.id}
