@@ -8,6 +8,15 @@ export function IntroSplashScreen() {
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
+    // Only show intro splash screen ONCE per browser session
+    if (typeof window !== 'undefined' && sessionStorage.getItem('hasSeenIntro')) {
+      setShow(false);
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('hasSeenIntro', 'true');
+    }
+
     // Stage 1: Logo falls from top to center
     const textTimer = setTimeout(() => {
       setAnimateText(true);

@@ -283,7 +283,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
           {isMuted ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
         </button>
       )}
-      <div className="absolute bottom-0 left-0 right-16 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10 space-y-3 pointer-events-none">
+      <div className="absolute bottom-0 left-0 right-0 p-4 pr-16 sm:pr-20 bg-gradient-to-t from-black/95 via-black/50 to-transparent z-10 space-y-3 pointer-events-none">
         {/* Creator Info */}
         <div className="flex items-center gap-3 pointer-events-auto">
           <Link href={`/profile/${author.username}`} className="flex items-center gap-2.5 group/user">
