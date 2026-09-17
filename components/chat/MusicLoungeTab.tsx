@@ -929,7 +929,10 @@ export function MusicLoungeTab() {
             {v.type === 'fire' && <Flame className="w-5 h-5 text-white fill-white" />}
             {v.type === 'love' && <Heart className="w-5 h-5 text-white fill-white" />}
             {v.type === 'vibe' && <Sparkles className="w-5 h-5 text-white fill-white" />}
-            {v.type === 'pagpag' && <Disc className="w-5 h-5 text-white animate-spin" />}
+            {v.type === 'pagpag' && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src="/pagpag.png" alt="Pagpag" className="w-5 h-5 object-contain bg-transparent shrink-0 animate-spin" />
+            )}
           </div>
         ))}
 
@@ -1604,7 +1607,9 @@ export function MusicLoungeTab() {
                     onClick={() => triggerReaction('pagpag')}
                     className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95 text-white"
                   >
-                    <Disc className="w-3.5 h-3.5 text-white" /> Pagpag
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/pagpag.png" alt="Pagpag" className="w-4 h-4 object-contain bg-transparent shrink-0" />
+                    <span>Pagpag</span>
                   </button>
                 </div>
               </>
