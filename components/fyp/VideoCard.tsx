@@ -41,8 +41,9 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
 
   useEffect(() => {
     if (!post?.id) return;
+    const channelName = `realtime-videocard-${post.id}-${Math.random().toString(36).substring(2, 7)}`;
     const channel = supabase
-      .channel(`realtime-videocard-${post.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -60,8 +61,9 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
             setLikesCount(updated.likes_count);
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
