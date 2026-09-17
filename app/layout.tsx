@@ -13,6 +13,9 @@ import { RealtimeNotificationToast } from '@/components/notifications/RealtimeNo
 
 import { IntroSplashScreen } from '@/components/layout/IntroSplashScreen';
 
+import { SuspendedBanner } from '@/components/ui/SuspendedBanner';
+import { BannedUserModal } from '@/components/ui/BannedUserModal';
+
 export const metadata: Metadata = {
   title: 'Instangalog | Pagpag Lover',
   description: 'An original multimedia social platform for short videos, music streaming, images, status updates, and realtime community chat.',
@@ -39,6 +42,8 @@ export default function RootLayout({
       <body className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-200">
         <IntroSplashScreen />
         <ThemeInitializer />
+        <SuspendedBanner />
+        <BannedUserModal />
         <div className="flex min-h-screen">
           {/* Desktop Navigation Sidebar */}
           <DesktopSidebar />

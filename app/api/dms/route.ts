@@ -84,6 +84,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing required parameters' }, { status: 400 });
     }
 
+    const { data: senderProfile } = await (supabaseAdmin.from('profiles') as any)
+      .select('status')
+      .eq('id', senderId)
+      .maybeSingle();
+
+    if (senderProfile?.status === 'suspended') {
+      return NextResponse.json(
+        { success: false, error: 'Your account is currently SUSPENDED due to content policy violations. Direct messaging is restricted.' },
+        { status: 403 }
+      );
+    }
+
+    if (senderProfile?.status === 'banned') {
+      return NextResponse.json(
+        { success: false, error: 'Account Banned: Access to direct messaging is revoked.' },
+        { status: 403 }
+      );
+    }
+
     const { data: newMsg, error } = await (supabaseAdmin.from('direct_messages') as any)
       .insert({
         sender_id: senderId,

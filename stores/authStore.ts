@@ -33,6 +33,7 @@ function buildSession(
     display_name?: string | null;
     avatar_url?: string | null;
     role?: string | null;
+    status?: string | null;
   } | null
 ): UserSession {
   const email = (supabaseUser.email ?? '').toLowerCase();
@@ -68,7 +69,7 @@ function buildSession(
     display_name,
     avatar_url: getAvatarUrl(rawAvatar, username),
     role: isAdmin ? 'admin' : (dbProfile?.role as any) || 'user',
-    status: 'active',
+    status: (dbProfile?.status as any) || 'active',
   };
 }
 
@@ -227,7 +228,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         await upsertProfile(data.user as Parameters<typeof upsertProfile>[0]);
         const { data: dbProfile } = await supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, role')
+          .select('username, display_name, avatar_url, role, status')
           .eq('id', data.user.id)
           .maybeSingle();
 
@@ -245,7 +246,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         await upsertProfile(session.user as Parameters<typeof upsertProfile>[0]);
         const { data: dbProfile } = await supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, role')
+          .select('username, display_name, avatar_url, role, status')
           .eq('id', session.user.id)
           .maybeSingle();
 
