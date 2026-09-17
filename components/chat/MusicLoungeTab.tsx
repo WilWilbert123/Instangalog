@@ -949,10 +949,11 @@ export function MusicLoungeTab() {
       </div>
 
       {/* Header Banner (Strict Black & White) */}
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-700 flex items-center justify-center p-2">
-            <Radio className="w-5 h-5 text-white" />
+      <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-transparent shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag Party" className="w-full h-full object-contain bg-transparent" />
           </div>
           <div>
             <h2 className="text-sm md:text-base font-bold text-white font-mono uppercase tracking-wider">
@@ -996,8 +997,9 @@ export function MusicLoungeTab() {
       {!inStudio ? (
         /* LOBBY STATE - Strict Black & White Studio Invitation */
         <div className="my-6 flex-1 max-w-xl mx-auto w-full flex flex-col items-center justify-center p-8 rounded-3xl border border-zinc-800 bg-zinc-950 text-center shadow-2xl relative overflow-hidden">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-700 flex items-center justify-center mb-4 shadow-inner">
-            <Headphones className="w-8 h-8 text-white" />
+          <div className="w-14 h-14 flex items-center justify-center mb-4 bg-transparent shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag Party" className="w-full h-full object-contain bg-transparent" />
           </div>
 
           <h3 className="text-lg font-black text-white mb-1 font-mono uppercase">Pagpag Party Studio</h3>

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { getAvatarUrl } from '@/lib/utils/avatar';
+import { getSystemSettings, scanSpamContent } from '@/lib/services/systemSettings';
 
 // ---------------------------------------------------------------------------
 // IMPORTANT: All clients MUST join the SAME channel name for Broadcast
@@ -182,8 +183,14 @@ export async function sendChatMessage(
     return null;
   }
 
-  if (!checkChatRateLimit(realUserId)) {
+  const settings = await getSystemSettings();
+
+  if (settings.enableChatRateLimit && !checkChatRateLimit(realUserId)) {
     throw new Error('Rate limit exceeded: Please wait before sending more messages (Max 5 per 10 seconds).');
+  }
+
+  if (settings.enableSpamFilter && scanSpamContent(message)) {
+    throw new Error('Message blocked by Anti-Spam Safety Filter (malicious link or domain detected).');
   }
 
   const { data, error } = await (supabase
