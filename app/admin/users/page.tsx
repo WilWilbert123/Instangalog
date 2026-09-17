@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Profile } from '@/types/user';
 import { getAllUsers, updateUserRole, updateUserStatus } from '@/lib/services/adminService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
-import { Users, Search, ShieldCheck, UserCheck, ShieldAlert, Loader2, ExternalLink } from 'lucide-react';
+import { Users, Search, ShieldCheck, UserCheck, ShieldAlert, Loader2, ExternalLink, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminUsersPage() {
@@ -24,24 +24,34 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, []);
 
+  const [errorToast, setErrorToast] = useState('');
+
   const handleRoleChange = async (userId: string, newRole: 'user' | 'moderator' | 'admin') => {
     setUpdatingUserId(userId);
-    const success = await updateUserRole(userId, newRole);
-    if (success) {
+    setErrorToast('');
+    const res = await updateUserRole(userId, newRole);
+    if (res.success) {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );
+    } else {
+      setErrorToast(res.error || 'Failed to update user role');
+      setTimeout(() => setErrorToast(''), 4000);
     }
     setUpdatingUserId(null);
   };
 
   const handleStatusChange = async (userId: string, newStatus: 'active' | 'suspended' | 'banned') => {
     setUpdatingUserId(userId);
-    const success = await updateUserStatus(userId, newStatus);
-    if (success) {
+    setErrorToast('');
+    const res = await updateUserStatus(userId, newStatus);
+    if (res.success) {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u))
       );
+    } else {
+      setErrorToast(res.error || 'Failed to update user status');
+      setTimeout(() => setErrorToast(''), 4000);
     }
     setUpdatingUserId(null);
   };
@@ -69,6 +79,11 @@ export default function AdminUsersPage() {
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Manage user roles, inspect profiles, and issue live status restrictions in Supabase
           </p>
+          {errorToast && (
+            <p className="text-xs font-bold text-rose-500 mt-1.5 p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              {errorToast}
+            </p>
+          )}
         </div>
 
         {/* Search Bar */}
@@ -112,108 +127,126 @@ export default function AdminUsersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
-                      {/* User avatar + handle */}
-                      <td className="p-4 pl-6 align-middle">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={getAvatarUrl(u.avatar_url, u.username || u.display_name)}
-                              alt={u.display_name}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(u.username || u.display_name);
-                              }}
-                            />
+                  filteredUsers.map((u) => {
+                    const isSuperAdmin = u.username?.toLowerCase() === 'johnwilbert';
+
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                        {/* User avatar + handle */}
+                        <td className="p-4 pl-6 align-middle">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={getAvatarUrl(u.avatar_url, u.username || u.display_name)}
+                                alt={u.display_name}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(u.username || u.display_name);
+                                }}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
+                                <span className="truncate">{u.display_name}</span>
+                                {u.role === 'admin' && (
+                                  <span className="p-0.5 rounded-full bg-black text-white dark:bg-white dark:text-black shrink-0">
+                                    <ShieldCheck className="w-3 h-3" />
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">@{u.username}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
-                              <span className="truncate">{u.display_name}</span>
-                              {u.role === 'admin' && (
-                                <span className="p-0.5 rounded-full bg-black text-white dark:bg-white dark:text-black shrink-0">
-                                  <ShieldCheck className="w-3 h-3" />
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">@{u.username}</p>
-                          </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Role Selector */}
-                      <td className="p-4 align-middle">
-                        <select
-                          value={u.role}
-                          disabled={updatingUserId === u.id}
-                          onChange={(e) =>
-                            handleRoleChange(u.id, e.target.value as 'user' | 'moderator' | 'admin')
-                          }
-                          className={`w-full max-w-[120px] px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase border cursor-pointer focus:outline-none transition-colors ${
-                            u.role === 'admin'
-                              ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white'
-                              : u.role === 'moderator'
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
-                              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                          }`}
-                        >
-                          <option value="user" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            USER
-                          </option>
-                          <option value="moderator" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            MODERATOR
-                          </option>
-                          <option value="admin" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            ADMIN
-                          </option>
-                        </select>
-                      </td>
+                        {/* Role Selector */}
+                        <td className="p-4 align-middle">
+                          {isSuperAdmin ? (
+                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase w-fit" title="Super Admin account is immutable">
+                              <Lock className="w-3 h-3 shrink-0" />
+                              <span>SUPER ADMIN</span>
+                            </div>
+                          ) : (
+                            <select
+                              value={u.role}
+                              disabled={updatingUserId === u.id}
+                              onChange={(e) =>
+                                handleRoleChange(u.id, e.target.value as 'user' | 'moderator' | 'admin')
+                              }
+                              className={`w-full max-w-[120px] px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase border cursor-pointer focus:outline-none transition-colors ${
+                                u.role === 'admin'
+                                  ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white'
+                                  : u.role === 'moderator'
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
+                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              <option value="user" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                USER
+                              </option>
+                              <option value="moderator" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                MODERATOR
+                              </option>
+                              <option value="admin" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                ADMIN
+                              </option>
+                            </select>
+                          )}
+                        </td>
 
-                      {/* Status Selector */}
-                      <td className="p-4 align-middle">
-                        <select
-                          value={u.status}
-                          disabled={updatingUserId === u.id}
-                          onChange={(e) =>
-                            handleStatusChange(u.id, e.target.value as 'active' | 'suspended' | 'banned')
-                          }
-                          className={`w-full max-w-[120px] px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase border cursor-pointer focus:outline-none transition-colors ${
-                            u.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                              : u.status === 'suspended'
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-800'
-                              : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400 border-red-200 dark:border-red-800'
-                          }`}
-                        >
-                          <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            ACTIVE
-                          </option>
-                          <option value="suspended" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            SUSPENDED
-                          </option>
-                          <option value="banned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                            BANNED
-                          </option>
-                        </select>
-                      </td>
+                        {/* Status Selector */}
+                        <td className="p-4 align-middle">
+                          {isSuperAdmin ? (
+                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase w-fit" title="Super Admin account is protected">
+                              <Lock className="w-3 h-3 shrink-0" />
+                              <span>ACTIVE</span>
+                            </div>
+                          ) : (
+                            <select
+                              value={u.status}
+                              disabled={updatingUserId === u.id}
+                              onChange={(e) =>
+                                handleStatusChange(u.id, e.target.value as 'active' | 'suspended' | 'banned')
+                              }
+                              className={`w-full max-w-[120px] px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase border cursor-pointer focus:outline-none transition-colors ${
+                                u.status === 'active'
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                                  : u.status === 'suspended'
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                  : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400 border-red-200 dark:border-red-800'
+                              }`}
+                            >
+                              <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                ACTIVE
+                              </option>
+                              <option value="suspended" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                SUSPENDED
+                              </option>
+                              <option value="banned" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                                BANNED
+                              </option>
+                            </select>
+                          )}
+                        </td>
 
-                      <td className="p-4 font-semibold text-slate-900 dark:text-white align-middle">{u.posts_count}</td>
-                      <td className="p-4 font-semibold text-slate-900 dark:text-white align-middle">
-                        {u.followers_count.toLocaleString()}
-                      </td>
+                        <td className="p-4 font-semibold text-slate-900 dark:text-white align-middle">{u.posts_count}</td>
+                        <td className="p-4 font-semibold text-slate-900 dark:text-white align-middle">
+                          {u.followers_count.toLocaleString()}
+                        </td>
 
-                      <td className="p-4 pr-8 text-right align-middle">
-                        <Link
-                          href={`/profile/${u.username}`}
-                          className="inline-block px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap bg-black text-white dark:bg-white dark:text-black hover:opacity-90 transition-all shadow-sm active:scale-95 text-center"
-                        >
-                          View Profile ↗
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
+                        <td className="p-4 pr-8 text-right align-middle">
+                          <Link
+                            href={`/profile/${u.username}`}
+                            className="inline-block px-3.5 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap bg-black text-white dark:bg-white dark:text-black hover:opacity-90 transition-all shadow-sm active:scale-95 text-center"
+                          >
+                            View Profile ↗
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

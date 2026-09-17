@@ -171,70 +171,71 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const typingInfo = formatTypingStatus(typingUsers);
 
   return (
-    <div className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100vh-6rem)]'}`}>
+    <div className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden min-h-0 transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100dvh-7.5rem)] md:h-[calc(100vh-6rem)]'}`}>
 
       {/* Main Header with Logo & Online Counter */}
-      <div className="px-6 py-3.5 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-md shrink-0">
+      <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-transparent shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />
+            <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain bg-transparent" />
           </div>
           <div>
             <h2 className="text-sm md:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               {simpleMode ? 'Global Chat' : 'Community Hub'}
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">Tangalog Bisayawa Lounge</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">Tangalog Bisayawa Lounge</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm" title={`${onlineCount} Online Now`}>
-          <span className="relative flex h-2.5 w-2.5">
+        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm shrink-0" title={`${onlineCount} Online Now`}>
+          <span className="relative flex h-2 w-2 sm:h-2.5 sm:w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            <span className="relative inline-flex rounded-full h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-500" />
           </span>
           <span>{onlineCount} Online</span>
         </div>
       </div>
 
-      {/* Interactive Tabs Navigation Bar (Hidden in Simple Mode) */}
+      {/* Interactive Tabs Navigation Bar (Hidden in Simple Mode) - Compact on Mobile */}
       {!simpleMode && (
-        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+        <div className="px-1.5 sm:px-4 py-1.5 sm:py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 flex items-center justify-between gap-1 sm:gap-1.5 shrink-0">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shrink-0 ${
+            className={`px-1.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-2 transition flex-1 min-w-0 ${
               activeTab === 'chat'
                 ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
-            <span>Global Chat</span>
+            <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Global Chat</span>
           </button>
 
           <button
             onClick={() => setActiveTab('dms')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shrink-0 ${
+            className={`px-1.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-2 transition flex-1 min-w-0 ${
               activeTab === 'dms'
                 ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
             }`}
           >
-            <Mail className="w-4 h-4" />
-            <span>Direct Messages</span>
+            <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Direct Messages</span>
           </button>
 
           <button
             onClick={() => setActiveTab('music')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition shrink-0 ${
+            className={`px-1.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-2 transition flex-1 min-w-0 ${
               activeTab === 'music'
                 ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
             }`}
           >
-            <Radio className="w-4 h-4" />
-            <span>Pagpag Party</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/pagpag.png" alt="Pagpag" className="w-3.5 h-3.5 sm:w-4 sm:h-4 object-contain bg-transparent shrink-0" />
+            <span className="truncate">Pagpag Party</span>
           </button>
         </div>
       )}
@@ -243,7 +244,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       {activeTab === 'chat' && (
         <>
           {/* Message History */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 hide-scrollbar bg-slate-50/50 dark:bg-slate-950/50">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-3 sm:space-y-4 hide-scrollbar bg-slate-50/50 dark:bg-slate-950/50">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-3 text-slate-500 dark:text-slate-400">
                 <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center shadow-sm">
@@ -321,7 +322,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
 
           {/* Typing Indicator */}
           {typingUsers.length > 0 && typingInfo.primaryUser && (
-            <div className="px-4 py-1.5 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/50 flex items-center gap-2">
+            <div className="px-4 py-1.5 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/50 flex items-center gap-2 shrink-0">
               <div className="w-4 h-4 rounded-full overflow-hidden border border-emerald-500/40 bg-slate-100 dark:bg-slate-800 shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -344,13 +345,13 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
           )}
 
           {sendError && (
-            <div className="px-4 py-2 bg-rose-500/10 border-t border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium text-center">
+            <div className="px-4 py-2 bg-rose-500/10 border-t border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium text-center shrink-0">
               {sendError}
             </div>
           )}
 
           {/* Input Footer */}
-          <form onSubmit={handleSend} className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-3">
+          <form onSubmit={handleSend} className="p-2.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2 sm:gap-3 shrink-0">
             <input
               type="text"
               value={inputText}
@@ -359,15 +360,15 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
               onClick={() => {
                 if (!user) openAuthModal('Sign in to chat with the Instangalog community');
               }}
-              className="flex-1 px-4 py-3 text-xs md:text-sm rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
+              className="flex-1 px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs md:text-sm rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="px-5 py-3 rounded-xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-md disabled:opacity-50 transition-all active:scale-95 flex items-center gap-2"
+              className="px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-md disabled:opacity-50 transition-all active:scale-95 flex items-center gap-1.5 sm:gap-2 shrink-0"
             >
               <span>Send</span>
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </form>
         </>

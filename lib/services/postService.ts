@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { ensureValidUuid } from '@/lib/utils/uuid';
+import { getSystemSettings, scanSpamContent } from '@/lib/services/systemSettings';
 
 export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
   try {
@@ -177,9 +178,22 @@ export async function createPost(postData: Partial<Post>): Promise<Post> {
       );
     }
 
-    const moderationStatus = postData.type === 'video' ? 'pending' : 'approved';
+    const settings = await getSystemSettings();
 
-    // 2. Insert into Supabase posts table using supabaseAdmin (bypasses RLS)
+    // 1. Anti-Spam Safety Scanning
+    if (settings.enableSpamFilter && scanSpamContent(postData.caption || '')) {
+      throw new Error('Post caption blocked by Anti-Spam Safety Filter (malicious link or domain detected).');
+    }
+
+    // 2. Moderation Pre-Approval Rule Check
+    let moderationStatus: 'pending' | 'approved' = 'approved';
+    if (postData.type === 'video') {
+      moderationStatus = settings.requireVideoApproval ? 'pending' : 'approved';
+    } else {
+      moderationStatus = settings.autoApproveImageStatus ? 'approved' : 'pending';
+    }
+
+    // 3. Insert into Supabase posts table using supabaseAdmin (bypasses RLS)
     const { data: postRecord, error: postErr } = await (supabaseAdmin.from('posts') as any)
       .insert({
         user_id: userId,

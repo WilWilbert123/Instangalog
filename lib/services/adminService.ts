@@ -157,6 +157,16 @@ export async function rejectPost(postId: string, adminId: string, reason: string
 }
 
 export async function getAllUsers(): Promise<Profile[]> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/admin/users');
+      const json = await res.json();
+      if (json.users) return json.users as Profile[];
+    } catch (err: any) {
+      console.warn('[getAllUsers client fetch error]:', err?.message);
+    }
+  }
+
   try {
     let { data, error } = await supabaseAdmin
       .from('profiles')
@@ -185,37 +195,65 @@ export async function getAllUsers(): Promise<Profile[]> {
 export async function updateUserRole(
   userId: string,
   newRole: 'user' | 'moderator' | 'admin'
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action: 'update_role', role: newRole }),
+      });
+      const json = await res.json();
+      if (json.success) return { success: true };
+      return { success: false, error: json.error || 'Failed to update user role' };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error updating user role' };
+    }
+  }
+
   const validUserId = ensureValidUuid(userId);
   try {
     const { error } = await (supabaseAdmin.from('profiles') as any)
       .update({ role: newRole, updated_at: new Date().toISOString() })
       .eq('id', validUserId);
 
-    if (!error) return true;
+    if (!error) return { success: true };
+    return { success: false, error: error.message };
   } catch (err: any) {
-    console.warn('[updateUserRole Error]:', err?.message);
+    return { success: false, error: err?.message };
   }
-
-  return false;
 }
 
 export async function updateUserStatus(
   userId: string,
   newStatus: 'active' | 'suspended' | 'banned'
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action: 'update_status', status: newStatus }),
+      });
+      const json = await res.json();
+      if (json.success) return { success: true };
+      return { success: false, error: json.error || 'Failed to update user status' };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error updating user status' };
+    }
+  }
+
   const validUserId = ensureValidUuid(userId);
   try {
     const { error } = await (supabaseAdmin.from('profiles') as any)
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', validUserId);
 
-    if (!error) return true;
+    if (!error) return { success: true };
+    return { success: false, error: error.message };
   } catch (err: any) {
-    console.warn('[updateUserStatus Error]:', err?.message);
+    return { success: false, error: err?.message };
   }
-
-  return false;
 }
 
 export interface AdminDashboardMetrics {

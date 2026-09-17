@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   ShieldCheck,
@@ -26,11 +26,61 @@ export default function AdminSettingsPage() {
   const [autoApproveImageStatus, setAutoApproveImageStatus] = useState(true);
   const [enableChatRateLimit, setEnableChatRateLimit] = useState(true);
   const [enableSpamFilter, setEnableSpamFilter] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSave = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  // 1. Fetch live security and moderation settings on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/admin/settings');
+        const data = await res.json();
+        if (data?.success && data.settings) {
+          setRequireVideoApproval(Boolean(data.settings.requireVideoApproval));
+          setAutoApproveImageStatus(Boolean(data.settings.autoApproveImageStatus));
+          setEnableChatRateLimit(Boolean(data.settings.enableChatRateLimit));
+          setEnableSpamFilter(Boolean(data.settings.enableSpamFilter));
+        }
+      } catch (err: any) {
+        console.warn('Error fetching admin settings:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  // 2. Persist updated configuration to server real-time
+  const handleSave = async () => {
+    setSaving(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requireVideoApproval,
+          autoApproveImageStatus,
+          enableChatRateLimit,
+          enableSpamFilter,
+        }),
+      });
+
+      const data = await res.json();
+      if (data?.success) {
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3000);
+      } else {
+        setErrorMsg(data?.error || 'Failed to save settings');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Network error saving settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -48,17 +98,23 @@ export default function AdminSettingsPage() {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Configure content pre-approval rules, chat rate limits, CDN storage limits, and database security.
           </p>
+          {errorMsg && (
+            <p className="text-xs font-bold text-rose-500">{errorMsg}</p>
+          )}
         </div>
 
         <button
           onClick={handleSave}
-          className="px-5 py-2.5 rounded-2xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-lg hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 shrink-0 self-start sm:self-center"
+          disabled={saving || loading}
+          className="px-5 py-2.5 rounded-2xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-lg hover:opacity-90 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2 shrink-0 self-start sm:self-center"
         >
           {savedSuccess ? (
             <>
               <Check className="w-4 h-4 text-emerald-500" />
               <span>Settings Saved!</span>
             </>
+          ) : saving ? (
+            <span>Saving...</span>
           ) : (
             <>
               <Save className="w-4 h-4" />
