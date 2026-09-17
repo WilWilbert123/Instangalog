@@ -25,6 +25,34 @@ interface GlobalChatDrawerProps {
 
 type TabType = 'chat' | 'dms' | 'music';
 
+function getUniqueUserColor(identifier: string) {
+  if (!identifier) {
+    return {
+      textColor: 'hsl(38, 95%, 55%)',
+      bgStyle: { backgroundColor: 'hsla(38, 95%, 55%, 0.08)', borderColor: 'hsla(38, 95%, 55%, 0.25)' },
+      ringStyle: { boxShadow: '0 0 0 2px hsla(38, 95%, 55%, 0.5)' },
+    };
+  }
+
+  let hash = 0;
+  for (let i = 0; i < identifier.length; i++) {
+    hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const hue = Math.abs(hash) % 360;
+  // High saturation (85%) & balanced lightness (55%) ensure ultra-vibrant colors per user
+  const textColor = `hsl(${hue}, 85%, 55%)`;
+  const bgStyle = {
+    backgroundColor: `hsla(${hue}, 85%, 55%, 0.07)`,
+    borderColor: `hsla(${hue}, 85%, 55%, 0.22)`,
+  };
+  const ringStyle = {
+    boxShadow: `0 0 0 2px hsla(${hue}, 85%, 55%, 0.45)`,
+  };
+
+  return { textColor, bgStyle, ringStyle };
+}
+
 function cleanDisplayName(name: string): string {
   if (!name) return 'Someone';
   return name.replace(/\s*\([^)]*\)/g, '').trim() || name;
@@ -171,25 +199,25 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const typingInfo = formatTypingStatus(typingUsers);
 
   return (
-    <div className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden min-h-0 transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100dvh-7.5rem)] md:h-[calc(100vh-6rem)]'}`}>
+    <div className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden min-h-0 transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100dvh-10rem)] md:h-[calc(100vh-6rem)]'}`}>
 
       {/* Main Header with Logo & Online Counter */}
-      <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 shrink-0">
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-transparent shrink-0">
+      <div className="px-3 sm:px-6 py-1.5 sm:py-3.5 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center bg-transparent shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain bg-transparent" />
           </div>
           <div>
-            <h2 className="text-sm md:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h2 className="text-xs sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5 sm:gap-2">
               {simpleMode ? 'Global Chat' : 'Community Hub'}
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">Tangalog Bisayawa Lounge</p>
+            <p className="text-[9px] sm:text-[11px] text-slate-500 dark:text-slate-400">Tangalog Bisayawa Lounge</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm shrink-0" title={`${onlineCount} Online Now`}>
+        <div className="flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-sm shrink-0" title={`${onlineCount} Online Now`}>
           <span className="relative flex h-2 w-2 sm:h-2.5 sm:w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-500" />
@@ -273,11 +301,19 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
                     };
 
                 const avatarSrc = getAvatarUrl(author.avatar_url, author.username || author.display_name || 'user');
+                const userColor = getUniqueUserColor(author.username || author.display_name || 'user');
 
                 return (
-                  <div key={msg.id} className={`flex items-start gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
-                    <Link href={`/profile/${author.username}`} className="shrink-0">
-                      <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+                  <div key={msg.id} className={`flex items-start gap-2.5 sm:gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+                    <Link href={`/profile/${author.username}`} className="shrink-0 group">
+                      <div
+                        style={author.role === 'admin' ? undefined : userColor.ringStyle}
+                        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 transition-transform group-hover:scale-105 shadow-sm ${
+                          author.role === 'admin'
+                            ? 'ring-2 ring-amber-400 dark:ring-amber-500'
+                            : ''
+                        }`}
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={avatarSrc}
@@ -291,22 +327,32 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
                       </div>
                     </Link>
 
-                    <div className={`max-w-md space-y-1 ${isMe ? 'items-end text-right' : ''}`}>
-                      <div className="flex items-baseline gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="font-bold text-slate-900 dark:text-slate-200">{author.display_name}</span>
+                    <div className={`max-w-[80%] sm:max-w-md space-y-1 flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      <div className={`flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 ${isMe ? 'flex-row-reverse' : ''}`}>
+                        <span
+                          style={isMe ? undefined : { color: userColor.textColor }}
+                          className={`font-extrabold transition-colors ${isMe ? 'text-slate-900 dark:text-white' : ''}`}
+                        >
+                          {author.display_name}
+                        </span>
+
                         {author.role === 'admin' && (
-                          <span className="px-1.5 py-0.5 text-[9px] rounded bg-black text-white dark:bg-white dark:text-black font-bold">
-                            ADMIN
+                          <span className="px-1.5 py-0.2 text-[9px] rounded-md bg-gradient-to-r from-amber-500 to-orange-500 text-black font-black shadow-sm tracking-wider">
+                            👑 ADMIN
                           </span>
                         )}
-                        <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+
+                        <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
 
                       <div
-                        className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                        style={isMe ? undefined : userColor.bgStyle}
+                        className={`p-3 rounded-2xl text-xs sm:text-sm leading-relaxed transition-all shadow-sm w-fit max-w-full break-words ${
                           isMe
-                            ? 'bg-black text-white dark:bg-white dark:text-black rounded-tr-none shadow-sm'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-none shadow-sm'
+                            ? 'bg-gradient-to-r from-slate-900 to-black text-white dark:bg-gradient-to-r dark:from-white dark:to-slate-100 dark:text-black rounded-tr-xs border border-slate-700 dark:border-slate-300 ml-auto'
+                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-xs hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
                         {msg.message}

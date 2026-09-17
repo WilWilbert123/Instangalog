@@ -19,7 +19,11 @@ export async function GET() {
     const formatted = await Promise.all(
       (profiles || []).map(async (u: any) => {
         const [{ count: postsCount }, { count: followersCount }] = await Promise.all([
-          supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', u.id),
+          supabaseAdmin
+            .from('posts')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', u.id)
+            .or('moderation_status.eq.approved,moderation_status.is.null'),
           supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', u.id),
         ]);
 
