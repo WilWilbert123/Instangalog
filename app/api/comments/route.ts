@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const comment = await addComment(postId, userId, content, parentId);
     return NextResponse.json({ success: true, comment });
-  } catch {
-    return NextResponse.json({ error: 'Failed to create comment' }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to create comment' }, { status: 403 });
   }
 }

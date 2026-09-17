@@ -41,10 +41,21 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
     });
     return initial;
   });
+  const [commentsCountMap, setCommentsCountMap] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    posts.forEach((p) => {
+      initial[p.id] = p.comments_count || 0;
+    });
+    return initial;
+  });
 
   const handleToggleLike = async (postId: string) => {
     if (!user) {
       openAuthModal('Sign in to like posts');
+      return;
+    }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot like posts.`);
       return;
     }
 
@@ -57,7 +68,17 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
       [postId]: nextState ? (prev[postId] || 0) + 1 : Math.max(0, (prev[postId] || 1) - 1),
     }));
 
-    await togglePostLike(postId, user.id, currentlyLiked);
+    try {
+      await togglePostLike(postId, user.id, currentlyLiked);
+    } catch (err: any) {
+      // Revert optimistic update
+      setLikedMap((prev) => ({ ...prev, [postId]: currentlyLiked }));
+      setLikesCountMap((prev) => ({
+        ...prev,
+        [postId]: currentlyLiked ? (prev[postId] || 0) + 1 : Math.max(0, (prev[postId] || 1) - 1),
+      }));
+      alert(err?.message || 'Failed to like post.');
+    }
   };
 
   const handleShare = (postId: string, captionText?: string) => {
@@ -224,7 +245,7 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{post.comments_count || 0}</span>
+                      <span>{commentsCountMap[post.id] ?? post.comments_count ?? 0}</span>
                     </button>
 
                     <button
@@ -255,6 +276,9 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
         <CommentDrawer
           postId={activeCommentPostId}
           onClose={() => setActiveCommentPostId(null)}
+          onCommentAdded={(pId, count) => {
+            setCommentsCountMap((prev) => ({ ...prev, [pId]: count }));
+          }}
         />
       )}
     </div>

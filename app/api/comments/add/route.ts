@@ -13,6 +13,6 @@ export async function POST(request: NextRequest) {
     const comment = await addComment(postId, userId, content, parentId);
     return NextResponse.json({ success: true, comment });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to add comment' }, { status: 500 });
+    return NextResponse.json({ error: err?.message || 'Failed to add comment' }, { status: 403 });
   }
 }

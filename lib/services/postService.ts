@@ -265,21 +265,31 @@ export async function createPost(postData: Partial<Post>): Promise<Post> {
 
 export async function togglePostLike(postId: string, userId: string, currentlyLiked: boolean): Promise<boolean> {
   if (typeof window !== 'undefined') {
-    try {
-      const res = await fetch('/api/posts/like', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, userId, currentlyLiked }),
-      });
-      const json = await res.json();
-      return json.isLiked;
-    } catch {
-      // Fallthrough
+    const res = await fetch('/api/posts/like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId, userId, currentlyLiked }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error(json.error || 'Failed to toggle like');
     }
+    return json.isLiked;
   }
 
   const validUserId = ensureValidUuid(userId);
   try {
+    // Check account status
+    const { data: userProf } = await (supabaseAdmin as any)
+      .from('profiles')
+      .select('status')
+      .eq('id', validUserId)
+      .maybeSingle();
+
+    if (userProf && (userProf.status === 'suspended' || userProf.status === 'banned')) {
+      throw new Error(`Your account is ${userProf.status}. You cannot like posts.`);
+    }
+
     if (currentlyLiked) {
       await (supabaseAdmin as any).from('post_likes').delete().eq('post_id', postId).eq('user_id', validUserId);
 
@@ -316,6 +326,6 @@ export async function togglePostLike(postId: string, userId: string, currentlyLi
     }
   } catch (err: any) {
     console.error('[togglePostLike error]:', err?.message);
-    return !currentlyLiked;
+    throw err;
   }
 }

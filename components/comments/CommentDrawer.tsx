@@ -12,9 +12,10 @@ import { supabase } from '@/lib/supabase/client';
 interface CommentDrawerProps {
   postId: string;
   onClose: () => void;
+  onCommentAdded?: (postId: string, newCount: number) => void;
 }
 
-export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
+export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawerProps) {
   const { user, openAuthModal } = useAuthStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
@@ -50,7 +51,9 @@ export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
 
           setComments((prev) => {
             if (prev.some((c) => c.id === newCommentRecord.id)) return prev;
-            return [...prev, newCommentRecord as Comment];
+            const updated = [...prev, newCommentRecord as Comment];
+            onCommentAdded?.(postId, updated.length);
+            return updated;
           });
         }
       )
@@ -59,7 +62,7 @@ export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [postId]);
+  }, [postId, onCommentAdded]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,15 +70,25 @@ export function CommentDrawer({ postId, onClose }: CommentDrawerProps) {
       openAuthModal('Sign in to leave a comment');
       return;
     }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot post comments.`);
+      return;
+    }
     if (!newCommentText.trim()) return;
 
-    const created = await addComment(postId, user.id, newCommentText, replyTarget?.id);
-    setComments((prev) => {
-      if (prev.some((c) => c.id === created.id)) return prev;
-      return [...prev, created];
-    });
-    setNewCommentText('');
-    setReplyTarget(null);
+    try {
+      const created = await addComment(postId, user.id, newCommentText, replyTarget?.id);
+      setComments((prev) => {
+        if (prev.some((c) => c.id === created.id)) return prev;
+        const updated = [...prev, created];
+        onCommentAdded?.(postId, updated.length);
+        return updated;
+      });
+      setNewCommentText('');
+      setReplyTarget(null);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to post comment.');
+    }
   };
 
   return (

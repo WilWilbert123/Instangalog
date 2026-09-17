@@ -28,23 +28,31 @@ export async function getCommentsForPost(postId: string): Promise<Comment[]> {
 
 export async function addComment(postId: string, userId: string, content: string, parentId?: string): Promise<Comment> {
   if (typeof window !== 'undefined') {
-    try {
-      const res = await fetch('/api/comments/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId, userId, content, parentId }),
-      });
-      const json = await res.json();
-      if (res.ok && json.comment) {
-        return json.comment as Comment;
-      }
-    } catch {
-      // Fallthrough
+    const res = await fetch('/api/comments/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId, userId, content, parentId }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error(json.error || 'Failed to add comment');
     }
+    return json.comment as Comment;
   }
 
   const validUserId = ensureValidUuid(userId);
   try {
+    // Check account status
+    const { data: userProf } = await (supabaseAdmin as any)
+      .from('profiles')
+      .select('status')
+      .eq('id', validUserId)
+      .maybeSingle();
+
+    if (userProf && (userProf.status === 'suspended' || userProf.status === 'banned')) {
+      throw new Error(`Your account is ${userProf.status}. You cannot post comments.`);
+    }
+
     const { data, error } = await (supabaseAdmin as any)
       .from('comments')
       .insert({
@@ -59,7 +67,11 @@ export async function addComment(postId: string, userId: string, content: string
       `)
       .single();
 
-    if (!error && data) {
+    if (error) {
+      throw new Error(error.message || 'Failed to insert comment');
+    }
+
+    if (data) {
       const commentRecord = data as unknown as Comment;
 
       // 1. Increment comments_count on posts
@@ -86,8 +98,9 @@ export async function addComment(postId: string, userId: string, content: string
 
       return commentRecord;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error adding comment to Supabase:', err);
+    throw err;
   }
 
   const newComment: Comment = {

@@ -45,7 +45,7 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
   // Comment Drawer State
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
 
-  // Like Map State
+  // Like & Comment Map State
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
   const [likesCountMap, setLikesCountMap] = useState<Record<string, number>>(() => {
     const map: Record<string, number> = {};
@@ -54,10 +54,21 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
     });
     return map;
   });
+  const [commentsCountMap, setCommentsCountMap] = useState<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    initialPosts.forEach((p) => {
+      map[p.id] = p.comments_count || 0;
+    });
+    return map;
+  });
 
   const handleToggleLike = async (postId: string) => {
     if (!user) {
       openAuthModal('Sign in to like posts');
+      return;
+    }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot like posts.`);
       return;
     }
 
@@ -72,7 +83,19 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
         : Math.max(0, (prev[postId] || 1) - 1),
     }));
 
-    await togglePostLike(postId, user.id, currentlyLiked);
+    try {
+      await togglePostLike(postId, user.id, currentlyLiked);
+    } catch (err: any) {
+      // Revert optimistic update
+      setLikedMap((prev) => ({ ...prev, [postId]: currentlyLiked }));
+      setLikesCountMap((prev) => ({
+        ...prev,
+        [postId]: currentlyLiked
+          ? (prev[postId] || 0) + 1
+          : Math.max(0, (prev[postId] || 1) - 1),
+      }));
+      alert(err?.message || 'Failed to like post.');
+    }
   };
 
   const handleShare = (postId: string, captionText?: string) => {
@@ -399,7 +422,7 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
                         >
                           <MessageCircle className="w-4 h-4" />
-                          <span>{post.comments_count || 0}</span>
+                          <span>{commentsCountMap[post.id] ?? post.comments_count ?? 0}</span>
                         </button>
 
                         <button
@@ -429,6 +452,9 @@ export function ExploreClient({ initialPosts, initialProfiles }: ExploreClientPr
         <CommentDrawer
           postId={activeCommentPostId}
           onClose={() => setActiveCommentPostId(null)}
+          onCommentAdded={(pId, count) => {
+            setCommentsCountMap((prev) => ({ ...prev, [pId]: count }));
+          }}
         />
       )}
     </div>

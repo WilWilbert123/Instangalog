@@ -31,6 +31,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
 
   const [isLiked, setIsLiked] = useState<boolean>(false);
   const [likesCount, setLikesCount] = useState<number>(initialPost.likes_count || 0);
+  const [commentsCount, setCommentsCount] = useState<number>(initialPost.comments_count || 0);
 
   useEffect(() => {
     if (post?.id) {
@@ -43,12 +44,22 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
       openAuthModal('Sign in to like posts');
       return;
     }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      return;
+    }
 
     const nextState = !isLiked;
     setIsLiked(nextState);
     setLikesCount((prev) => (nextState ? prev + 1 : Math.max(0, prev - 1)));
 
-    await togglePostLike(post.id, user.id, isLiked);
+    try {
+      await togglePostLike(post.id, user.id, isLiked);
+    } catch (err: any) {
+      setIsLiked(isLiked);
+      setLikesCount((prev) => (isLiked ? prev + 1 : Math.max(0, prev - 1)));
+      alert(err?.message || 'Failed to like post.');
+    }
   };
 
   const handleShare = () => {
@@ -195,7 +206,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
                 className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
               >
                 <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>{post.comments_count || 0}</span>
+                <span>{commentsCount}</span>
               </button>
 
               <button
@@ -223,6 +234,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
         <CommentDrawer
           postId={activeCommentPostId}
           onClose={() => setActiveCommentPostId(null)}
+          onCommentAdded={(_pId, count) => setCommentsCount(count)}
         />
       )}
 

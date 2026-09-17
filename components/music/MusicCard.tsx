@@ -46,10 +46,20 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
       openAuthModal('Sign in to like tracks');
       return;
     }
+    if (user.status === 'suspended' || user.status === 'banned') {
+      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      return;
+    }
     const nextState = !isLiked;
     setIsLiked(nextState);
     setLikesCount((prev) => (nextState ? prev + 1 : Math.max(0, prev - 1)));
-    await togglePostLike(post.id, user.id, isLiked);
+    try {
+      await togglePostLike(post.id, user.id, isLiked);
+    } catch (err: any) {
+      setIsLiked(isLiked);
+      setLikesCount((prev) => (isLiked ? prev + 1 : Math.max(0, prev - 1)));
+      alert(err?.message || 'Failed to like post.');
+    }
   };
 
   const handleShare = () => {
