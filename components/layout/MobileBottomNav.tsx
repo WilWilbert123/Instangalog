@@ -17,10 +17,17 @@ export function MobileBottomNav() {
     { href: user ? `/profile/${user.username}` : '/profile', label: 'Profile', icon: User, protected: true },
   ];
 
-  const handleClick = (e: React.MouseEvent, isProtected?: boolean) => {
-    if (isProtected && !user) {
+  const handleClick = (e: React.MouseEvent, item: (typeof navItems)[0]) => {
+    if (item.protected && !user) {
       e.preventDefault();
       openAuthModal('Sign in to continue');
+      return;
+    }
+
+    // When clicking Home while already on Home feed, trigger smooth in-app feed refresh
+    if (item.href === '/' && pathname === '/') {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('refresh-fyp-feed'));
     }
   };
 
@@ -35,7 +42,7 @@ export function MobileBottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              onClick={(e) => handleClick(e, item.protected)}
+              onClick={(e) => handleClick(e, item)}
               className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-all ${
                 isActive
                   ? 'text-black dark:text-white font-bold'

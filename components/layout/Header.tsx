@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { Search, Bell, Sparkles, LogIn, Sun, Moon, ArrowLeft, LogOut } from 'lucide-react';
 import { InstallAppButton } from '@/components/pwa/InstallAppButton';
@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase/client';
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, openAuthModal, logout } = useAuthStore();
   const { theme, setTheme } = useThemeStore();
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,7 +94,16 @@ export function Header() {
       {/* Normal Header Content (hidden on mobile when search is open) */}
       <div className={`flex items-center justify-between w-full ${isMobileSearchOpen ? 'hidden md:flex' : 'flex'}`}>
         {/* Mobile Brand Logo */}
-        <Link href="/" className="md:hidden flex items-center gap-2">
+        <Link
+          href="/"
+          onClick={(e) => {
+            if (pathname === '/') {
+              e.preventDefault();
+              window.dispatchEvent(new CustomEvent('refresh-fyp-feed'));
+            }
+          }}
+          className="md:hidden flex items-center gap-2"
+        >
           <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-sm shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />

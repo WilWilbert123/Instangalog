@@ -34,10 +34,16 @@ export function DesktopSidebar() {
     navItems.push({ href: '/admin', label: 'Admin Desk', icon: Shield, protected: true });
   }
 
-  const handleNavClick = (e: React.MouseEvent, isProtected?: boolean) => {
+  const handleNavClick = (e: React.MouseEvent, href: string, isProtected?: boolean) => {
     if (isProtected && !user) {
       e.preventDefault();
       openAuthModal('Sign in to access this feature');
+      return;
+    }
+
+    if (href === '/' && pathname === '/') {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('refresh-fyp-feed'));
     }
   };
 
@@ -45,7 +51,16 @@ export function DesktopSidebar() {
     <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-4 justify-between z-30 transition-colors duration-200">
       <div className="space-y-6">
         {/* Brand Header */}
-        <Link href="/" className="flex items-center gap-3 px-2 py-1">
+        <Link
+          href="/"
+          onClick={(e) => {
+            if (pathname === '/') {
+              e.preventDefault();
+              window.dispatchEvent(new CustomEvent('refresh-fyp-feed'));
+            }
+          }}
+          className="flex items-center gap-3 px-2 py-1"
+        >
           <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-0.5 shadow-md shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/pagpag.png" alt="Pagpag Logo" className="w-full h-full object-contain scale-125" />
@@ -70,7 +85,7 @@ export function DesktopSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={(e) => handleNavClick(e, item.protected)}
+                onClick={(e) => handleNavClick(e, item.href, item.protected)}
                 className={`flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-sm transition-all ${
                   isActive
                     ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
