@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Post } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
+import { useModalStore } from '@/stores/modalStore';
 import { togglePostLike } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
@@ -39,13 +40,15 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
     }
   }, [post?.id, user?.id]);
 
+  const { showAlert } = useModalStore();
+
   const handleToggleLike = async () => {
     if (!user) {
       openAuthModal('Sign in to like posts');
       return;
     }
     if (user.status === 'suspended' || user.status === 'banned') {
-      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      showAlert(`Your account is currently ${user.status}. You cannot like posts.`, 'Account Restricted', 'warning');
       return;
     }
 
@@ -58,7 +61,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
     } catch (err: any) {
       setIsLiked(isLiked);
       setLikesCount((prev) => (isLiked ? prev + 1 : Math.max(0, prev - 1)));
-      alert(err?.message || 'Failed to like post.');
+      showAlert(err?.message || 'Failed to like post.', 'Error', 'error');
     }
   };
 

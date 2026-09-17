@@ -8,6 +8,7 @@ import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { togglePostLike } from '@/lib/services/postService';
 import { recordPostView } from '@/lib/services/viewService';
 import { useAuthStore } from '@/stores/authStore';
+import { useModalStore } from '@/stores/modalStore';
 import {
   Grid,
   Video,
@@ -49,13 +50,15 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
     return initial;
   });
 
+  const { showAlert } = useModalStore();
+
   const handleToggleLike = async (postId: string) => {
     if (!user) {
       openAuthModal('Sign in to like posts');
       return;
     }
     if (user.status === 'suspended' || user.status === 'banned') {
-      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      showAlert(`Your account is currently ${user.status}. You cannot like posts.`, 'Account Restricted', 'warning');
       return;
     }
 
@@ -77,7 +80,7 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
         ...prev,
         [postId]: currentlyLiked ? (prev[postId] || 0) + 1 : Math.max(0, (prev[postId] || 1) - 1),
       }));
-      alert(err?.message || 'Failed to like post.');
+      showAlert(err?.message || 'Failed to like post.', 'Error', 'error');
     }
   };
 

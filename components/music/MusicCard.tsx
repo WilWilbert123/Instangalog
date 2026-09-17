@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Post } from '@/types/post';
 import { usePlayerStore } from '@/stores/playerStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useModalStore } from '@/stores/modalStore';
 import { togglePostLike } from '@/lib/services/postService';
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { Play, Pause, Heart, MessageCircle, Share2, Disc, ShieldCheck } from 'lucide-react';
@@ -41,13 +42,15 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
     }
   };
 
+  const { showAlert } = useModalStore();
+
   const handleLike = async () => {
     if (!user) {
       openAuthModal('Sign in to like tracks');
       return;
     }
     if (user.status === 'suspended' || user.status === 'banned') {
-      alert(`Your account is currently ${user.status}. You cannot like posts.`);
+      showAlert(`Your account is currently ${user.status}. You cannot like posts.`, 'Account Restricted', 'warning');
       return;
     }
     const nextState = !isLiked;
@@ -58,7 +61,7 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
     } catch (err: any) {
       setIsLiked(isLiked);
       setLikesCount((prev) => (isLiked ? prev + 1 : Math.max(0, prev - 1)));
-      alert(err?.message || 'Failed to like post.');
+      showAlert(err?.message || 'Failed to like post.', 'Error', 'error');
     }
   };
 
