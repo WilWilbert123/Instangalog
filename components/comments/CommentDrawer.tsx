@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Comment } from '@/types/comment';
 import { getCommentsForPost, addComment } from '@/lib/services/commentService';
 import { useAuthStore } from '@/stores/authStore';
+import { useModalStore } from '@/stores/modalStore';
 import { CommentItem } from './CommentItem';
 import { X, Send } from 'lucide-react';
 
@@ -17,6 +18,7 @@ interface CommentDrawerProps {
 
 export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawerProps) {
   const { user, openAuthModal } = useAuthStore();
+  const { showAlert } = useModalStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
   const [replyTarget, setReplyTarget] = useState<{ id: string; authorName: string } | null>(null);
@@ -71,7 +73,7 @@ export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawer
       return;
     }
     if (user.status === 'suspended' || user.status === 'banned') {
-      alert(`Your account is currently ${user.status}. You cannot post comments.`);
+      showAlert(`Your account is currently ${user.status}. You cannot post comments.`, 'Account Restricted', 'warning');
       return;
     }
     if (!newCommentText.trim()) return;
@@ -87,7 +89,7 @@ export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawer
       setNewCommentText('');
       setReplyTarget(null);
     } catch (err: any) {
-      alert(err?.message || 'Failed to post comment.');
+      showAlert(err?.message || 'Failed to post comment.', 'Error', 'error');
     }
   };
 

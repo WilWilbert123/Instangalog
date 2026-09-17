@@ -15,6 +15,7 @@ import { IntroSplashScreen } from '@/components/layout/IntroSplashScreen';
 
 import { SuspendedBanner } from '@/components/ui/SuspendedBanner';
 import { BannedUserModal } from '@/components/ui/BannedUserModal';
+import { AlertModal } from '@/components/modals/AlertModal';
 
 export const metadata: Metadata = {
   title: 'Instangalog | Pagpag Lover',
@@ -44,6 +45,7 @@ export default function RootLayout({
         <ThemeInitializer />
         <SuspendedBanner />
         <BannedUserModal />
+        <AlertModal />
         <div className="flex min-h-screen">
           {/* Desktop Navigation Sidebar */}
           <DesktopSidebar />
