@@ -26,8 +26,9 @@ export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawer
   useEffect(() => {
     getCommentsForPost(postId).then(setComments);
 
+    const channelName = `comments-${postId}-${Math.random().toString(36).substring(2, 7)}`;
     const channel = supabase
-      .channel(`comments-${postId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -58,8 +59,9 @@ export function CommentDrawer({ postId, onClose, onCommentAdded }: CommentDrawer
             return updated;
           });
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
