@@ -5,7 +5,7 @@ import { Post } from '@/types/post';
 import { VideoCard } from './VideoCard';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { organizeSmartFeed, markVideoAsWatched } from '@/lib/utils/watchedVideoManager';
-import { Sparkles } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 
 interface VerticalFeedProps {
   posts: Post[];
@@ -92,11 +92,10 @@ export function VerticalFeed({ posts }: VerticalFeedProps) {
 
   return (
     <div className="relative w-full h-full flex flex-col items-center">
-      {/* Floating Refresh Toast Notice */}
+      {/* Floating Refresh Rotating Icon Indicator (No Text/Emojis) */}
       {showRefreshToast && (
-        <div className="absolute top-3 z-50 animate-bounce flex items-center gap-2 px-4 py-2 rounded-full bg-orange-600/90 dark:bg-orange-500/90 text-white font-semibold text-xs shadow-xl backdrop-blur-md border border-orange-400/30">
-          <Sparkles className="w-4 h-4 text-amber-200 animate-spin" />
-          <span>Feed Refreshed • Unwatched First</span>
+        <div className="absolute top-3 z-50 flex items-center justify-center p-2.5 rounded-full bg-orange-600/90 dark:bg-orange-500/90 text-white shadow-2xl backdrop-blur-md border border-white/20">
+          <RotateCw className="w-5 h-5 text-white animate-spin" />
         </div>
       )}
 
