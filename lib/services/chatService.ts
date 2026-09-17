@@ -183,6 +183,20 @@ export async function sendChatMessage(
     return null;
   }
 
+  // Check if sender profile is suspended or banned
+  const { data: senderProfile } = await (supabase.from('profiles') as any)
+    .select('status')
+    .eq('id', realUserId)
+    .maybeSingle();
+
+  if (senderProfile?.status === 'suspended') {
+    throw new Error('Your account is currently SUSPENDED due to content policy violations. Sending chat messages is restricted.');
+  }
+
+  if (senderProfile?.status === 'banned') {
+    throw new Error('Your account has been PERMANENTLY BANNED. Community chat privileges are revoked.');
+  }
+
   const settings = await getSystemSettings();
 
   if (settings.enableChatRateLimit && !checkChatRateLimit(realUserId)) {
