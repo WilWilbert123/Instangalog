@@ -47,6 +47,7 @@ export function getCloudinaryAccountPool(): CloudinaryAccount[] {
 
 /**
  * Uploads a video file directly to Cloudinary with automatic failover if an account is full
+ * or has preset configuration issues.
  */
 export async function uploadVideoToCloudinary(
   file: File,
@@ -68,53 +69,67 @@ export async function uploadVideoToCloudinary(
   let lastError: Error | null = null;
 
   for (const account of shuffledPool) {
-    try {
-      const result = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', account.uploadPreset);
-        formData.append('resource_type', 'video');
+    if (onProgress) onProgress(0);
 
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable && onProgress) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            onProgress(percent);
-          }
-        });
+    const presetsToTry = Array.from(
+      new Set([account.uploadPreset, 'instangalog_videos', 'ml_default', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''].filter(Boolean))
+    );
+    const endpointsToTry = [
+      `https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload`,
+      `https://api.cloudinary.com/v1_1/${account.cloudName}/video/upload`,
+    ];
 
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const data = JSON.parse(xhr.responseText);
-            const thumbnailUrl = data.secure_url.replace(/\.[^/.]+$/, '.jpg');
-            resolve({
-              url: data.secure_url,
-              thumbnailUrl,
-              duration: data.duration,
-              format: data.format,
-              accountUsed: account.cloudName,
+    for (const preset of presetsToTry) {
+      for (const endpoint of endpointsToTry) {
+        try {
+          const result = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', preset);
+            formData.append('resource_type', 'video');
+
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable && onProgress) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                onProgress(percent);
+              }
             });
-          } else {
-            try {
-              const errData = JSON.parse(xhr.responseText);
-              reject(new Error(errData.error?.message || `Quota/Upload error on account (${account.cloudName})`));
-            } catch {
-              reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
-            }
-          }
-        });
 
-        xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
-        xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                const data = JSON.parse(xhr.responseText);
+                const thumbnailUrl = (data.secure_url || data.url || '').replace(/\.[^/.]+$/, '.jpg');
+                resolve({
+                  url: data.secure_url || data.url,
+                  thumbnailUrl,
+                  duration: data.duration,
+                  format: data.format,
+                  accountUsed: account.cloudName,
+                });
+              } else {
+                try {
+                  const errData = JSON.parse(xhr.responseText);
+                  reject(new Error(errData.error?.message || `Quota/Upload error on account (${account.cloudName})`));
+                } catch {
+                  reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
+                }
+              }
+            });
 
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload`);
-        xhr.send(formData);
-      });
+            xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
+            xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
 
-      return result;
-    } catch (err: any) {
-      console.warn(`Cloudinary account (${account.cloudName}) failed:`, err.message);
-      lastError = err;
+            xhr.open('POST', endpoint);
+            xhr.send(formData);
+          });
+
+          return result;
+        } catch (err: any) {
+          console.warn(`Cloudinary account (${account.cloudName}) with preset [${preset}] failed:`, err.message);
+          lastError = err;
+        }
+      }
     }
   }
 
@@ -138,57 +153,64 @@ export async function uploadImageToCloudinary(
   let lastError: Error | null = null;
 
   for (const account of shuffledPool) {
+    if (onProgress) onProgress(0);
+
+    const presetsToTry = Array.from(
+      new Set([account.uploadPreset, 'instangalog_images', 'instangalog_videos', 'ml_default', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''].filter(Boolean))
+    );
     const endpoints = [
       `https://api.cloudinary.com/v1_1/${account.cloudName}/image/upload`,
       `https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload`,
     ];
 
-    for (const endpoint of endpoints) {
-      try {
-        const result = await new Promise<{ url: string; accountUsed?: string }>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('upload_preset', account.uploadPreset);
+    for (const preset of presetsToTry) {
+      for (const endpoint of endpoints) {
+        try {
+          const result = await new Promise<{ url: string; accountUsed?: string }>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', preset);
 
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable && onProgress) {
-              const percent = Math.round((e.loaded / e.total) * 100);
-              onProgress(percent);
-            }
-          });
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable && onProgress) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                onProgress(percent);
+              }
+            });
 
-          xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              const data = JSON.parse(xhr.responseText);
-              if (data.secure_url || data.url) {
-                resolve({
-                  url: data.secure_url || data.url,
-                  accountUsed: account.cloudName,
-                });
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                const data = JSON.parse(xhr.responseText);
+                if (data.secure_url || data.url) {
+                  resolve({
+                    url: data.secure_url || data.url,
+                    accountUsed: account.cloudName,
+                  });
+                } else {
+                  reject(new Error('Cloudinary response missing secure_url'));
+                }
               } else {
-                reject(new Error('Cloudinary response missing secure_url'));
+                try {
+                  const errData = JSON.parse(xhr.responseText);
+                  reject(new Error(errData.error?.message || `Upload error on account (${account.cloudName})`));
+                } catch {
+                  reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
+                }
               }
-            } else {
-              try {
-                const errData = JSON.parse(xhr.responseText);
-                reject(new Error(errData.error?.message || `Upload error on account (${account.cloudName})`));
-              } catch {
-                reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
-              }
-            }
+            });
+
+            xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
+            xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
+
+            xhr.open('POST', endpoint);
+            xhr.send(formData);
           });
 
-          xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
-          xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
-
-          xhr.open('POST', endpoint);
-          xhr.send(formData);
-        });
-
-        return result;
-      } catch (err: any) {
-        lastError = err;
+          return result;
+        } catch (err: any) {
+          lastError = err;
+        }
       }
     }
   }
@@ -216,58 +238,73 @@ export async function uploadMediaToCloudinary(
   let lastError: Error | null = null;
 
   for (const account of shuffledPool) {
-    try {
-      const result = await new Promise<{ url: string; thumbnailUrl?: string; duration?: number; accountUsed?: string }>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', account.uploadPreset);
+    if (onProgress) onProgress(0);
 
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable && onProgress) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            onProgress(percent);
-          }
-        });
+    const presetsToTry = Array.from(
+      new Set([account.uploadPreset, 'instangalog_videos', 'ml_default', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ''].filter(Boolean))
+    );
+    const endpointsToTry = [
+      `https://api.cloudinary.com/v1_1/${account.cloudName}/${resourceType}/upload`,
+      `https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload`,
+    ];
 
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const data = JSON.parse(xhr.responseText);
-            const url = data.secure_url || data.url;
-            let thumbnailUrl = data.secure_url;
-            if (resourceType === 'video' || file.type.startsWith('video/')) {
-              thumbnailUrl = (data.secure_url || data.url).replace(/\.[^/.]+$/, '.jpg');
-            }
-            resolve({
-              url,
-              thumbnailUrl,
-              duration: data.duration,
-              accountUsed: account.cloudName,
+    for (const preset of presetsToTry) {
+      for (const endpoint of endpointsToTry) {
+        try {
+          const result = await new Promise<{ url: string; thumbnailUrl?: string; duration?: number; accountUsed?: string }>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', preset);
+
+            xhr.upload.addEventListener('progress', (e) => {
+              if (e.lengthComputable && onProgress) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                onProgress(percent);
+              }
             });
-          } else {
-            try {
-              const errData = JSON.parse(xhr.responseText);
-              reject(new Error(errData.error?.message || `Quota/Upload error on account (${account.cloudName})`));
-            } catch {
-              reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
-            }
-          }
-        });
 
-        xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
-        xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                const data = JSON.parse(xhr.responseText);
+                const url = data.secure_url || data.url;
+                let thumbnailUrl = data.secure_url;
+                if (resourceType === 'video' || file.type.startsWith('video/')) {
+                  thumbnailUrl = (data.secure_url || data.url).replace(/\.[^/.]+$/, '.jpg');
+                }
+                resolve({
+                  url,
+                  thumbnailUrl,
+                  duration: data.duration,
+                  accountUsed: account.cloudName,
+                });
+              } else {
+                try {
+                  const errData = JSON.parse(xhr.responseText);
+                  reject(new Error(errData.error?.message || `Quota/Upload error on account (${account.cloudName})`));
+                } catch {
+                  reject(new Error(`Upload failed on account (${account.cloudName}) with status ${xhr.status}`));
+                }
+              }
+            });
 
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${account.cloudName}/${resourceType}/upload`);
-        xhr.send(formData);
-      });
+            xhr.addEventListener('error', () => reject(new Error(`Network error on account (${account.cloudName})`)));
+            xhr.addEventListener('abort', () => reject(new Error('Upload aborted by user')));
 
-      return result;
-    } catch (err: any) {
-      console.warn(`Cloudinary account (${account.cloudName}) failed:`, err.message);
-      lastError = err;
+            xhr.open('POST', endpoint);
+            xhr.send(formData);
+          });
+
+          return result;
+        } catch (err: any) {
+          console.warn(`Cloudinary account (${account.cloudName}) with preset [${preset}] failed:`, err.message);
+          lastError = err;
+        }
+      }
     }
   }
 
   throw lastError || new Error('All configured Cloudinary accounts in pool failed or reached their quota limit.');
 }
+
 
