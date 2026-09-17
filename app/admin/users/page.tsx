@@ -4,14 +4,21 @@ import React, { useState, useEffect } from 'react';
 import { Profile } from '@/types/user';
 import { getAllUsers, updateUserRole, updateUserStatus } from '@/lib/services/adminService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
+import { useAuthStore } from '@/stores/authStore';
 import { Users, Search, ShieldCheck, UserCheck, ShieldAlert, Loader2, ExternalLink, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminUsersPage() {
+  const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<Profile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+
+  const isCurrentUserSuperAdmin =
+    Boolean(currentUser) &&
+    (currentUser?.username?.toLowerCase() === 'johnwilbert' ||
+      (currentUser as any)?.email?.toLowerCase() === 'johnwilbertgamis2022@gmail.com');
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -161,14 +168,14 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
 
-                        {/* Role Selector */}
+                        {/* Role Selector (Interactive dropdown ONLY for Super Admin johnwilbertgamis2022@gmail.com) */}
                         <td className="p-4 align-middle">
                           {isSuperAdmin ? (
                             <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase w-fit" title="Super Admin account is immutable">
                               <Lock className="w-3 h-3 shrink-0" />
                               <span>SUPER ADMIN</span>
                             </div>
-                          ) : (
+                          ) : isCurrentUserSuperAdmin ? (
                             <select
                               value={u.role}
                               disabled={updatingUserId === u.id}
@@ -193,6 +200,16 @@ export default function AdminUsersPage() {
                                 ADMIN
                               </option>
                             </select>
+                          ) : (
+                            <div className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase w-fit border ${
+                              u.role === 'admin'
+                                ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white'
+                                : u.role === 'moderator'
+                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800'
+                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            }`}>
+                              <span>{u.role}</span>
+                            </div>
                           )}
                         </td>
 
