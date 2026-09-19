@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Post, PostType } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { useModalStore } from '@/stores/modalStore';
-import { createPost, togglePostLike } from '@/lib/services/postService';
+import { createPost, togglePostLike, getApprovedPosts, getPostById, SUPER_ADMIN_EMAIL } from '@/lib/services/postService';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { parseMediaUrl, detectPostTypeFromUrl } from '@/lib/utils/mediaEmbed';
 import { uploadMediaToCloudinary } from '@/lib/services/cloudinary';
@@ -38,15 +38,80 @@ import {
   Globe,
   Lock,
   Edit3,
-  Eye,
-  EyeOff,
-  RotateCcw,
+  RotateCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { EditPostModal } from '@/components/modals/EditPostModal';
-import { SUPER_ADMIN_EMAIL } from '@/lib/services/postService';
-import { getSeenPostIds, markPostAsSeen, clearSeenPostHistory } from '@/lib/utils/watchedVideoManager';
+import { getSeenPostIds, markPostAsSeen, clearSeenPostHistory, organizeSmartFeed } from '@/lib/utils/watchedVideoManager';
+import { recordPostView } from '@/lib/services/viewService';
+import { supabase } from '@/lib/supabase/client';
+
+interface FeedPostTrackerProps {
+  post: Post;
+  userId?: string;
+  children: React.ReactNode;
+}
+
+function FeedPostTracker({ post, userId, children }: FeedPostTrackerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasTriggeredRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !post?.id || hasTriggeredRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (!viewTimerRef.current && !hasTriggeredRef.current) {
+              viewTimerRef.current = setTimeout(() => {
+                hasTriggeredRef.current = true;
+                markPostAsSeen(post.id, userId);
+                recordPostView(post.id, userId);
+              }, 1200);
+            }
+          } else {
+            if (viewTimerRef.current && !hasTriggeredRef.current) {
+              clearTimeout(viewTimerRef.current);
+              viewTimerRef.current = null;
+            }
+          }
+        });
+      },
+      { threshold: 0.35 }
+    );
+
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      if (viewTimerRef.current) {
+        clearTimeout(viewTimerRef.current);
+        viewTimerRef.current = null;
+      }
+    };
+  }, [post?.id, userId]);
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseEnter={() => {
+        if (!hasTriggeredRef.current && !viewTimerRef.current) {
+          viewTimerRef.current = setTimeout(() => {
+            hasTriggeredRef.current = true;
+            markPostAsSeen(post.id, userId);
+            recordPostView(post.id, userId);
+          }, 1500);
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 interface FollowingFeedClientProps {
   initialPosts: Post[];
@@ -76,17 +141,147 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   // Edit Post Modal State
   const [editingPost, setEditingPost] = useState<Post | null>(null);
 
-  // Smart Seen/Unseen Feed Filter State
-  const [hideSeenPosts, setHideSeenPosts] = useState(false);
-  const [seenIds, setSeenIds] = useState<Set<string>>(() => getSeenPostIds(user?.id));
+  // Auto-Fresh Smart Feed State:
+  // Seen posts from previous sessions/refreshes do not appear on the Feed page.
+  // When refreshed, reloaded, or reopened, fresh unseen content appears.
+  const [sessionSeenIds, setSessionSeenIds] = useState<Set<string>>(() => getSeenPostIds(user?.id));
+  const [refreshSeed, setRefreshSeed] = useState<number>(() => Date.now());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showRefreshToast, setShowRefreshToast] = useState(false);
 
-  React.useEffect(() => {
-    const handleSeenUpdate = () => {
-      setSeenIds(getSeenPostIds(user?.id));
-    };
-    window.addEventListener('post-seen-updated', handleSeenUpdate);
-    return () => window.removeEventListener('post-seen-updated', handleSeenUpdate);
+  // Sync session seen IDs when user logs in or switches account
+  useEffect(() => {
+    setSessionSeenIds(getSeenPostIds(user?.id));
   }, [user?.id]);
+
+  const handleFreshFeed = useCallback(async () => {
+    setIsRefreshing(true);
+    setShowRefreshToast(true);
+
+    // 1. Commit all viewed posts into session seen set so they disappear on this fresh refresh
+    const latestSeen = getSeenPostIds(user?.id);
+    setSessionSeenIds(latestSeen);
+    setRefreshSeed(Date.now());
+
+    // 2. Fetch fresh approved posts from backend to pick up any new uploads immediately
+    try {
+      const freshPosts = await getApprovedPosts(undefined, user);
+      if (freshPosts && freshPosts.length > 0) {
+        setPosts(freshPosts);
+      }
+    } catch {
+      // Retain existing posts on network error
+    }
+
+    // 3. Smooth scroll to top of feed
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+
+    setTimeout(() => {
+      setShowRefreshToast(false);
+    }, 2400);
+  }, [user]);
+
+  // Listen for refresh events (e.g. logo or bottom bar nav clicks)
+  useEffect(() => {
+    window.addEventListener('refresh-following-feed', handleFreshFeed);
+    window.addEventListener('refresh-fyp-feed', handleFreshFeed);
+    return () => {
+      window.removeEventListener('refresh-following-feed', handleFreshFeed);
+      window.removeEventListener('refresh-fyp-feed', handleFreshFeed);
+    };
+  }, [handleFreshFeed]);
+
+  // Supabase Realtime Channel: Smooth and accurate live posts
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime:following_feed')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'posts',
+        },
+        async (payload) => {
+          const newPostRecord = payload.new as any;
+          if (!newPostRecord?.id) return;
+          try {
+            const fullPost = await getPostById(newPostRecord.id);
+            if (fullPost && fullPost.moderation_status === 'approved') {
+              const isVisible =
+                fullPost.visibility === 'public' ||
+                (user && fullPost.user_id === user.id) ||
+                (user && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+
+              if (isVisible) {
+                setPosts((prev) => {
+                  if (prev.some((p) => p.id === fullPost.id)) return prev;
+                  return [fullPost, ...prev];
+                });
+              }
+            }
+          } catch {
+            // Ignore fetch error
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+        },
+        async (payload) => {
+          const updated = payload.new as any;
+          if (!updated?.id) return;
+          try {
+            const fullPost = await getPostById(updated.id);
+            if (fullPost) {
+              setPosts((prev) => {
+                if (fullPost.moderation_status === 'approved') {
+                  const exists = prev.some((p) => p.id === fullPost.id);
+                  if (exists) {
+                    return prev.map((p) => (p.id === fullPost.id ? fullPost : p));
+                  } else {
+                    return [fullPost, ...prev];
+                  }
+                } else {
+                  return prev.filter((p) => p.id !== fullPost.id);
+                }
+              });
+            }
+          } catch {
+            // Ignore fetch error
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'posts',
+        },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            setPosts((prev) => prev.filter((p) => p.id !== deletedId));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   // Active Comment Drawer & Report Modal
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -112,6 +307,9 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   const { showAlert } = useModalStore();
 
   const handleToggleLike = async (postId: string) => {
+    markPostAsSeen(postId, user?.id);
+    recordPostView(postId, user?.id);
+
     if (!user) {
       openAuthModal('Sign in to like posts');
       return;
@@ -148,11 +346,14 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   };
 
   const handleShare = (postId: string, captionText: string) => {
+    markPostAsSeen(postId, user?.id);
+    recordPostView(postId, user?.id);
+
     const shareUrl = typeof window !== 'undefined'
       ? `${window.location.origin}/post/${postId}`
       : `https://instangalog.online/post/${postId}`;
     if (navigator.share) {
-      navigator.share({ title: captionText, url: shareUrl }).catch(() => {});
+      navigator.share({ title: captionText, url: shareUrl }).catch(() => { });
     } else {
       navigator.clipboard.writeText(shareUrl);
       alert('Link copied to clipboard!');
@@ -259,36 +460,36 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
         video:
           postType === 'video'
             ? {
-                video_url: finalMediaUrl,
-                thumbnail_url: finalThumbnailUrl,
-                duration: mediaDuration,
-              }
+              video_url: finalMediaUrl,
+              thumbnail_url: finalThumbnailUrl,
+              duration: mediaDuration,
+            }
             : undefined,
         image:
           postType === 'image'
             ? {
-                image_url: finalMediaUrl || 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1000&auto=format&fit=crop&q=80',
-              }
+              image_url: finalMediaUrl || 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1000&auto=format&fit=crop&q=80',
+            }
             : undefined,
         music:
           postType === 'music'
             ? (() => {
-                const media = parseMediaUrl(finalMediaUrl);
-                return {
-                  audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-                  cover_url: media.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
-                  title: caption.trim() || selectedFile?.name || 'New Track',
-                  artist: user.display_name,
-                  genre: 'Music Audio',
-                  duration: mediaDuration || 180,
-                };
-              })()
+              const media = parseMediaUrl(finalMediaUrl);
+              return {
+                audio_url: finalMediaUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+                cover_url: media.thumbnailUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+                title: caption.trim() || selectedFile?.name || 'New Track',
+                artist: user.display_name,
+                genre: 'Music Audio',
+                duration: mediaDuration || 180,
+              };
+            })()
             : undefined,
         status:
           postType === 'status'
             ? {
-                text: caption.trim(),
-              }
+              text: caption.trim(),
+            }
             : undefined,
       });
 
@@ -312,34 +513,58 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
     }
   };
 
-  const filteredPosts = posts.filter((p) => {
-    // 1. Type matching
-    const matchesType = activeFilter === 'all' || p.type === activeFilter;
-    if (!matchesType) return false;
+  const filteredPosts = useMemo(() => {
+    // 1. Filter by Type, Privacy, and Search Query
+    const candidateList = posts.filter((p) => {
+      // Type matching
+      const matchesType = activeFilter === 'all' || p.type === activeFilter;
+      if (!matchesType) return false;
 
-    // 2. Strict Privacy Check: Only author and Super Admin can see private posts
-    if (p.visibility === 'private') {
-      const isAuthor = Boolean(user && p.user_id === user.id);
-      const isSuperAdmin = Boolean(user && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
-      if (!isAuthor && !isSuperAdmin) return false;
+      // Strict Privacy Check: Only author and Super Admin can see private posts
+      if (p.visibility === 'private') {
+        const isAuthor = Boolean(user && p.user_id === user.id);
+        const isSuperAdmin = Boolean(user && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+        if (!isAuthor && !isSuperAdmin) return false;
+      }
+
+      // Search query filter
+      if (searchQueryParam.trim()) {
+        const q = searchQueryParam.toLowerCase();
+        const caption = (p.caption || '').toLowerCase();
+        const authorName = (p.author?.display_name || '').toLowerCase();
+        const username = (p.author?.username || '').toLowerCase();
+        return caption.includes(q) || authorName.includes(q) || username.includes(q);
+      }
+
+      return true;
+    });
+
+    // When searching, show all matched results directly
+    if (searchQueryParam.trim()) {
+      return candidateList;
     }
 
-    // 3. Seen post filter (Facebook-style feed)
-    if (hideSeenPosts && seenIds.has(p.id)) {
-      return false;
+    // Auto-fresh smart feed like TikTok/Facebook:
+    // Posts seen in previous sessions/refreshes are excluded so user sees fresh content.
+    const unseen = candidateList.filter((p) => !sessionSeenIds.has(p.id));
+
+    if (unseen.length > 0) {
+      return unseen;
     }
 
-    // 4. Search query
-    if (!searchQueryParam.trim()) return true;
-    const q = searchQueryParam.toLowerCase();
-    const caption = (p.caption || '').toLowerCase();
-    const authorName = (p.author?.display_name || '').toLowerCase();
-    const username = (p.author?.username || '').toLowerCase();
-    return caption.includes(q) || authorName.includes(q) || username.includes(q);
-  });
+    // If all posts in this category have already been seen, rotate them smoothly so feed is never blank
+    const offset = candidateList.length > 0 ? (refreshSeed % candidateList.length) : 0;
+    return [...candidateList.slice(offset), ...candidateList.slice(0, offset)];
+  }, [posts, activeFilter, user, searchQueryParam, sessionSeenIds, refreshSeed]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 text-slate-900 dark:text-white pb-12">
+    <div className="max-w-2xl mx-auto space-y-6 text-slate-900 dark:text-white pb-12 relative">
+      {/* Floating Refresh Rotating Icon Indicator */}
+      {showRefreshToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center p-3 rounded-full bg-slate-900/90 dark:bg-white/95 text-white dark:text-slate-900 shadow-2xl backdrop-blur-md border border-slate-700 dark:border-slate-300 animate-in fade-in slide-in-from-top duration-200">
+          <RotateCw className="w-5 h-5 text-amber-400 dark:text-amber-600 animate-spin" />
+        </div>
+      )}
       {/* Search Query Active Indicator */}
       {searchQueryParam && (
         <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs flex items-center justify-between gap-3 shadow-md">
@@ -381,11 +606,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                 type="button"
                 onClick={() => setPostVisibility('public')}
                 title="Public (Everyone can see)"
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
-                  postVisibility === 'public'
+                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${postVisibility === 'public'
                     ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm'
                     : 'text-slate-500 hover:text-black dark:hover:text-white'
-                }`}
+                  }`}
               >
                 <Globe className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline text-[10px]">Public</span>
@@ -394,11 +618,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                 type="button"
                 onClick={() => setPostVisibility('private')}
                 title="Only Me / Private (You & Super Admin)"
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
-                  postVisibility === 'private'
+                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${postVisibility === 'private'
                     ? 'bg-amber-500 text-white shadow-sm'
                     : 'text-slate-500 hover:text-black dark:hover:text-white'
-                }`}
+                  }`}
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline text-[10px]">Only Me</span>
@@ -440,11 +663,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                 setPostType(type as PostType);
                 clearSelectedFile();
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                postType === type
+              className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${postType === type
                   ? 'bg-black text-white dark:bg-white dark:text-black shadow-md'
                   : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
-              }`}
+                }`}
             >
               <Icon className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{label}</span>
@@ -461,10 +683,10 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
               postType === 'video'
                 ? 'Write a caption or description for your video...'
                 : postType === 'image'
-                ? 'Write a caption for your image...'
-                : postType === 'music'
-                ? 'Write a title or thoughts about this track...'
-                : "What's happening today?"
+                  ? 'Write a caption for your image...'
+                  : postType === 'music'
+                    ? 'Write a title or thoughts about this track...'
+                    : "What's happening today?"
             }
             className="w-full p-3 text-xs rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white transition-colors"
           />
@@ -479,8 +701,8 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                   postType === 'video'
                     ? 'video/*'
                     : postType === 'image'
-                    ? 'image/*'
-                    : 'audio/*,video/*'
+                      ? 'image/*'
+                      : 'audio/*,video/*'
                 }
                 onChange={handleFileChange}
                 className="hidden"
@@ -525,8 +747,8 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                       postType === 'video'
                         ? 'Paste Video URL (YouTube, Facebook, TikTok, Instagram, Direct MP4)'
                         : postType === 'music'
-                        ? 'Paste Audio/Music URL (SoundCloud, Spotify, MP3) or Video'
-                        : 'Paste Image URL (Direct JPG/PNG, Unsplash, Imgur)'
+                          ? 'Paste Audio/Music URL (SoundCloud, Spotify, MP3) or Video'
+                          : 'Paste Image URL (Direct JPG/PNG, Unsplash, Imgur)'
                     }
                     className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white transition-colors"
                   />
@@ -610,45 +832,27 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
           <button
             key={key}
             onClick={() => setActiveFilter(key as any)}
-            className={`px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 border ${
-              activeFilter === key
+            className={`px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shrink-0 border ${activeFilter === key
                 ? 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white shadow-md'
                 : 'bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white'
-            }`}
+              }`}
           >
             <Icon className="w-3.5 h-3.5" />
             <span>{label}</span>
           </button>
         ))}
 
-        <div className="ml-auto flex items-center gap-1.5 shrink-0 pl-2">
+        <div className="ml-auto flex items-center gap-2 shrink-0 pl-2">
           <button
             type="button"
-            onClick={() => setHideSeenPosts((prev) => !prev)}
-            className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border shrink-0 ${
-              hideSeenPosts
-                ? 'bg-blue-600 text-white border-blue-500 shadow-md'
-                : 'bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white'
-            }`}
-            title="Toggle hiding posts you have already viewed"
+            onClick={handleFreshFeed}
+            disabled={isRefreshing}
+            className="px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 hover:from-amber-500/20 hover:to-orange-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 dark:border-amber-500/20 transition-all shadow-sm active:scale-95 disabled:opacity-50 shrink-0"
+            title="Refresh feed with fresh unseen posts"
           >
-            {hideSeenPosts ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{hideSeenPosts ? 'Hiding Seen' : 'All Posts'}</span>
-          </button>
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
 
-          {seenIds.size > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                clearSeenPostHistory(user?.id);
-                setSeenIds(new Set());
-              }}
-              className="p-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors shrink-0"
-              title="Reset Seen Posts History"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
+          </button>
         </div>
       </div>
 
@@ -678,179 +882,184 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
 
             if (post.type === 'music') {
               return (
-                <MusicCard
-                  key={post.id}
-                  post={post}
-                  onOpenComments={(postId) => {
-                    if (!user) {
-                      openAuthModal('Sign in to comment');
-                      return;
-                    }
-                    setActiveCommentPostId(postId);
-                  }}
-                />
+                <FeedPostTracker key={post.id} post={post} userId={user?.id}>
+                  <MusicCard
+                    post={post}
+                    onOpenComments={(postId) => {
+                      markPostAsSeen(postId, user?.id);
+                      recordPostView(postId, user?.id);
+                      if (!user) {
+                        openAuthModal('Sign in to comment');
+                        return;
+                      }
+                      setActiveCommentPostId(postId);
+                    }}
+                  />
+                </FeedPostTracker>
               );
             }
 
             return (
-              <div
-                key={post.id}
-                className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white space-y-4 shadow-xl hover:shadow-2xl transition-all"
-              >
-                {/* Author Info Bar */}
-                <div className="flex items-center justify-between">
-                  <Link href={`/profile/${author.username}`} className="flex items-center gap-3 group/user">
-                    <div className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
+              <FeedPostTracker key={post.id} post={post} userId={user?.id}>
+                <div
+                  className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white space-y-4 shadow-xl hover:shadow-2xl transition-all"
+                >
+                  {/* Author Info Bar */}
+                  <div className="flex items-center justify-between">
+                    <Link href={`/profile/${author.username}`} className="flex items-center gap-3 group/user">
+                      <div className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={getAvatarUrl(author.avatar_url, author.username || author.display_name)}
+                          alt={author.display_name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(author.username || author.display_name);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover/user:underline flex items-center gap-1.5">
+                          <span>{author.display_name}</span>
+                          {author.role === 'admin' && (
+                            <span className="p-0.5 rounded-full bg-black text-white dark:bg-white dark:text-black">
+                              <ShieldCheck className="w-3 h-3" />
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">@{author.username}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 font-mono mt-0.5">
+                          <Calendar className="w-2.5 h-2.5" />
+                          {new Date(post.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </Link>
+
+                    <div className="flex items-center gap-1.5">
+                      {post.visibility === 'private' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
+                          <Lock className="w-3 h-3" />
+                          <span>Only Me</span>
+                        </span>
+                      )}
+
+                      {Boolean(
+                        user && (
+                          user.id === post.user_id ||
+                          user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+                        )
+                      ) && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingPost(post)}
+                            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
+                            title="Edit Caption & Privacy"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                      <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
+                        Following
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Caption Text */}
+                  {post.caption && (
+                    <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
+                      {post.caption}
+                    </p>
+                  )}
+
+                  {/* Media Container */}
+                  {post.type === 'video' && post.video && (
+                    <FeedVideoPlayer
+                      videoUrl={post.video.video_url}
+                      thumbnailUrl={post.video.thumbnail_url}
+                      caption={post.caption}
+                    />
+                  )}
+
+                  {post.type === 'image' && post.image && (
+                    <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 max-h-[500px]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={getAvatarUrl(author.avatar_url, author.username || author.display_name)}
-                        alt={author.display_name}
-                        referrerPolicy="no-referrer"
+                        src={post.image.image_url}
+                        alt={post.caption}
                         className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = getCartoonAvatar(author.username || author.display_name);
-                        }}
                       />
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white group-hover/user:underline flex items-center gap-1.5">
-                        <span>{author.display_name}</span>
-                        {author.role === 'admin' && (
-                          <span className="p-0.5 rounded-full bg-black text-white dark:bg-white dark:text-black">
-                            <ShieldCheck className="w-3 h-3" />
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">@{author.username}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 font-mono mt-0.5">
-                        <Calendar className="w-2.5 h-2.5" />
-                        {new Date(post.created_at).toLocaleDateString()}
-                      </p>
+                  )}
+
+                  {/* Hashtags */}
+                  {post.hashtags && post.hashtags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {post.hashtags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-[11px] font-medium border border-slate-200 dark:border-slate-800"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
                     </div>
-                  </Link>
+                  )}
 
-                  <div className="flex items-center gap-1.5">
-                    {post.visibility === 'private' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
-                        <Lock className="w-3 h-3" />
-                        <span>Only Me</span>
-                      </span>
-                    )}
-
-                    {Boolean(
-                      user && (
-                        user.id === post.user_id ||
-                        user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
-                      )
-                    ) && (
+                  {/* Action Bar (Like, Comment, Share) */}
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {/* Like Button */}
                       <button
-                        type="button"
-                        onClick={() => setEditingPost(post)}
-                        className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
-                        title="Edit Caption & Privacy"
+                        onClick={() => handleToggleLike(post.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isLiked
+                            ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+                            : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white'
+                          }`}
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Heart className={`w-4 h-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                        <span>{currentLikes}</span>
                       </button>
-                    )}
 
-                    <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
-                      Following
-                    </span>
-                  </div>
-                </div>
-
-                {/* Caption Text */}
-                {post.caption && (
-                  <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
-                    {post.caption}
-                  </p>
-                )}
-
-                {/* Media Container */}
-                {post.type === 'video' && post.video && (
-                  <FeedVideoPlayer
-                    videoUrl={post.video.video_url}
-                    thumbnailUrl={post.video.thumbnail_url}
-                    caption={post.caption}
-                  />
-                )}
-
-                {post.type === 'image' && post.image && (
-                  <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-slate-800 max-h-[500px]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={post.image.image_url}
-                      alt={post.caption}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-
-                {/* Hashtags */}
-                {post.hashtags && post.hashtags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {post.hashtags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-[11px] font-medium border border-slate-200 dark:border-slate-800"
+                      {/* Comment Button */}
+                      <button
+                        onClick={() => {
+                          markPostAsSeen(post.id, user?.id);
+                          recordPostView(post.id, user?.id);
+                          if (!user) {
+                            openAuthModal('Sign in to comment');
+                            return;
+                          }
+                          setActiveCommentPostId(post.id);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
                       >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{commentsCountMap[post.id] ?? post.comments_count ?? 0}</span>
+                      </button>
 
-                {/* Action Bar (Like, Comment, Share) */}
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    {/* Like Button */}
-                    <button
-                      onClick={() => handleToggleLike(post.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        isLiked
-                          ? 'bg-red-500/10 text-red-500 border border-red-500/20'
-                          : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white'
-                      }`}
-                    >
-                      <Heart className={`w-4 h-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-                      <span>{currentLikes}</span>
-                    </button>
+                      {/* Share Button */}
+                      <button
+                        onClick={() => handleShare(post.id, post.caption)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span>Share</span>
+                      </button>
 
-                    {/* Comment Button */}
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          openAuthModal('Sign in to comment');
-                          return;
-                        }
-                        setActiveCommentPostId(post.id);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>{commentsCountMap[post.id] ?? post.comments_count ?? 0}</span>
-                    </button>
-
-                    {/* Share Button */}
-                    <button
-                      onClick={() => handleShare(post.id, post.caption)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white transition-all"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      <span>Share</span>
-                    </button>
-
-                    {/* Report Button */}
-                    <button
-                      onClick={() => setReportTarget({ type: post.type, id: post.id, title: post.caption })}
-                      className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
-                      title="Report Content"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                    </button>
+                      {/* Report Button */}
+                      <button
+                        onClick={() => setReportTarget({ type: post.type, id: post.id, title: post.caption })}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
+                        title="Report Content"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </FeedPostTracker>
             );
           })
         )}
