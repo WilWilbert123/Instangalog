@@ -118,11 +118,17 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
 
   const pathnameRef = useRef(pathname);
   const activeTabRef = useRef(activeTab);
+  const simpleModeRef = useRef(simpleMode);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    simpleModeRef.current = simpleMode;
+  }, [simpleMode]);
 
   // When switching tabs inside the drawer (e.g. going to Pagpag Party or DMs), immediately stop all playing soundboard audio
   useEffect(() => {
     activeTabRef.current = activeTab;
-    if (activeTab !== 'chat') {
+    if (!simpleMode && activeTab !== 'chat') {
       activeVoicesRef.current.forEach((v) => {
         try {
           v.audio.pause();
@@ -133,12 +139,13 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       });
       activeVoicesRef.current = [];
     }
-  }, [activeTab]);
+  }, [activeTab, simpleMode]);
 
-  // When navigating away from /chat (e.g. going to Feed or other pages), immediately stop all playing soundboard audio
+  // When navigating away from /chat or home (with simpleMode), immediately stop all playing soundboard audio
   useEffect(() => {
     pathnameRef.current = pathname;
-    if (pathname !== '/chat') {
+    const isGlobalChatAllowed = simpleMode || pathname === '/chat' || pathname?.startsWith('/chat/');
+    if (!isGlobalChatAllowed) {
       activeVoicesRef.current.forEach((v) => {
         try {
           v.audio.pause();
@@ -149,7 +156,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       });
       activeVoicesRef.current = [];
     }
-  }, [pathname]);
+  }, [pathname, simpleMode]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -208,11 +215,26 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
     }, 2600);
   }, []);
 
+  // Check if current view is actively inside Global Chat (either on /chat route or embedded on Home)
+  const checkIsInsideGlobalChat = useCallback(() => {
+    // If in simpleMode (e.g. embedded on Home split-view)
+    if (simpleModeRef.current) {
+      if (typeof window !== 'undefined' && containerRef.current) {
+        // If hidden by responsive CSS (e.g. mobile hidden lg:grid)
+        if (containerRef.current.offsetParent === null && window.innerWidth < 1024) {
+          return false;
+        }
+      }
+      return true;
+    }
+    // Standard full mode on /chat
+    return (pathnameRef.current === '/chat' || pathnameRef.current?.startsWith('/chat/')) && activeTabRef.current === 'chat';
+  }, []);
+
   // Smart Concurrency Limiter & Dynamic Ducking Audio Mixer
   const playManagedSound = useCallback((soundUrl: string, soundId: string, onEnded?: () => void) => {
-    // STRICT: Only play audio if user is currently inside Global Chat (/chat route and 'chat' tab)
-    // Never plays when browsing Feed or in Pagpag Party
-    const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+    // Plays audio if user is inside Global Chat (either /chat page or embedded on Home)
+    const isInsideGlobalChat = checkIsInsideGlobalChat();
     if (!isInsideGlobalChat || isMutedRef.current) {
       onEnded?.();
       return;
@@ -265,7 +287,10 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
 
     // 5. Play new sound instance
     try {
-      const audio = new Audio(soundUrl);
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.setAttribute('playsinline', 'true');
+      audio.src = soundUrl;
       audio.volume = duckedVolume;
       const voiceInstance = {
         id: `${now}-${Math.random()}`,
@@ -299,15 +324,18 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
         triggerEnded();
       };
 
-      audio.play().catch((err) => {
-        console.warn('[GlobalChat] Audio play prevented by browser policy:', err);
-        triggerEnded();
-      });
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[GlobalChat] Audio play prevented by browser policy:', err);
+          triggerEnded();
+        });
+      }
     } catch (err) {
       console.warn('[GlobalChat] Audio init error:', err);
       onEnded?.();
     }
-  }, []);
+  }, [checkIsInsideGlobalChat]);
 
   useEffect(() => {
     // Unlock browser audio permissions on user's first click/touch anywhere
@@ -378,9 +406,8 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       },
       undefined,
       (soundPayload: SoundBroadcastPayload) => {
-        // STRICT: Sounds only play if the user is inside Global Chat (/chat and 'chat' tab)
-        // If the user is on the Feed or in Pagpag Party, ignore sound broadcast
-        const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+        // Sounds play if the user is inside Global Chat (/chat or embedded on Home)
+        const isInsideGlobalChat = checkIsInsideGlobalChat();
         if (!isInsideGlobalChat) return;
 
         // Show real-time announcement toast
@@ -403,8 +430,8 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
         playManagedSound(soundPayload.soundUrl, soundPayload.soundId);
       },
       (reactionPayload: FloatingReactionPayload) => {
-        // Floating PNG reactions only display if the user is inside Global Chat
-        const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+        // Floating PNG reactions display if the user is inside Global Chat
+        const isInsideGlobalChat = checkIsInsideGlobalChat();
         if (!isInsideGlobalChat) return;
 
         if (reactionPayload?.imageUrl) {
@@ -417,7 +444,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.display_name, spawnFloatingSound, spawnFloatingPng, playManagedSound]);
+  }, [user?.id, user?.display_name, spawnFloatingSound, spawnFloatingPng, playManagedSound, checkIsInsideGlobalChat]);
 
   useEffect(() => {
     if (activeTab === 'chat' || simpleMode) {
@@ -498,7 +525,10 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const typingInfo = formatTypingStatus(typingUsers);
 
   return (
-    <div className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden min-h-0 transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100dvh-10rem)] md:h-[calc(100vh-6rem)]'}`}>
+    <div
+      ref={containerRef}
+      className={`w-full flex flex-col rounded-2xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/80 text-slate-900 dark:text-white shadow-2xl overflow-hidden min-h-0 transition-colors duration-200 ${className || 'max-w-4xl mx-auto h-[calc(100dvh-10rem)] md:h-[calc(100vh-6rem)]'}`}
+    >
 
       {/* Main Header with Logo & Online Counter */}
       <div className="px-3 sm:px-6 py-1.5 sm:py-3.5 glass-header flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 shrink-0">
