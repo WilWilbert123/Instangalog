@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import { Send, Users, Sparkles, MessageSquare, Mail, Radio, Volume2, VolumeX } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 // Import Tab Components
 import { DirectMessagesTab } from './DirectMessagesTab';
@@ -79,6 +80,7 @@ function formatTypingStatus(users: TypingUser[]): { text: string; primaryUser?: 
 
 export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDrawerProps = {}) {
   const { user, openAuthModal } = useAuthStore();
+  const pathname = usePathname();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -113,6 +115,41 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const activeVoicesRef = useRef<{ id: string; soundId: string; audio: HTMLAudioElement }[]>([]);
   const lastPlayedSoundTimesRef = useRef<Record<string, number>>({});
   const isMutedRef = useRef(isMuted);
+
+  const pathnameRef = useRef(pathname);
+  const activeTabRef = useRef(activeTab);
+
+  // When switching tabs inside the drawer (e.g. going to Pagpag Party or DMs), immediately stop all playing soundboard audio
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    if (activeTab !== 'chat') {
+      activeVoicesRef.current.forEach((v) => {
+        try {
+          v.audio.pause();
+          v.audio.currentTime = 0;
+        } catch {
+          // ignore
+        }
+      });
+      activeVoicesRef.current = [];
+    }
+  }, [activeTab]);
+
+  // When navigating away from /chat (e.g. going to Feed or other pages), immediately stop all playing soundboard audio
+  useEffect(() => {
+    pathnameRef.current = pathname;
+    if (pathname !== '/chat') {
+      activeVoicesRef.current.forEach((v) => {
+        try {
+          v.audio.pause();
+          v.audio.currentTime = 0;
+        } catch {
+          // ignore
+        }
+      });
+      activeVoicesRef.current = [];
+    }
+  }, [pathname]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -172,8 +209,14 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   }, []);
 
   // Smart Concurrency Limiter & Dynamic Ducking Audio Mixer
-  const playManagedSound = useCallback((soundUrl: string, soundId: string) => {
-    if (isMutedRef.current) return;
+  const playManagedSound = useCallback((soundUrl: string, soundId: string, onEnded?: () => void) => {
+    // STRICT: Only play audio if user is currently inside Global Chat (/chat route and 'chat' tab)
+    // Never plays when browsing Feed or in Pagpag Party
+    const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+    if (!isInsideGlobalChat || isMutedRef.current) {
+      onEnded?.();
+      return;
+    }
 
     const now = Date.now();
     const lastTime = lastPlayedSoundTimesRef.current[soundId] || 0;
@@ -182,6 +225,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
     // If the EXACT same sound was started within 350ms, skip duplicate audio
     // to avoid screeching robotic comb-filter echo.
     if (now - lastTime < 350) {
+      onEnded?.();
       return;
     }
     lastPlayedSoundTimesRef.current[soundId] = now;
@@ -230,6 +274,14 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       };
       activeVoicesRef.current.push(voiceInstance);
 
+      let endedCalled = false;
+      const triggerEnded = () => {
+        if (!endedCalled) {
+          endedCalled = true;
+          onEnded?.();
+        }
+      };
+
       audio.onended = () => {
         activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
         activeVoicesRef.current.forEach((v) => {
@@ -239,13 +291,21 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
             // ignore
           }
         });
+        triggerEnded();
+      };
+
+      audio.onerror = () => {
+        activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
+        triggerEnded();
       };
 
       audio.play().catch((err) => {
         console.warn('[GlobalChat] Audio play prevented by browser policy:', err);
+        triggerEnded();
       });
     } catch (err) {
       console.warn('[GlobalChat] Audio init error:', err);
+      onEnded?.();
     }
   }, []);
 
@@ -318,6 +378,11 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       },
       undefined,
       (soundPayload: SoundBroadcastPayload) => {
+        // STRICT: Sounds only play if the user is inside Global Chat (/chat and 'chat' tab)
+        // If the user is on the Feed or in Pagpag Party, ignore sound broadcast
+        const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+        if (!isInsideGlobalChat) return;
+
         // Show real-time announcement toast
         setPlayingSoundToast({
           senderName: soundPayload.senderName,
@@ -338,6 +403,10 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
         playManagedSound(soundPayload.soundUrl, soundPayload.soundId);
       },
       (reactionPayload: FloatingReactionPayload) => {
+        // Floating PNG reactions only display if the user is inside Global Chat
+        const isInsideGlobalChat = pathnameRef.current === '/chat' && activeTabRef.current === 'chat';
+        if (!isInsideGlobalChat) return;
+
         if (reactionPayload?.imageUrl) {
           spawnFloatingPng(reactionPayload.imageUrl);
         }
@@ -692,24 +761,24 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
           )}
 
           {/* Input Footer */}
-          <form onSubmit={handleSend} className="p-2 sm:p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <form onSubmit={handleSend} className="p-2 sm:p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-1 sm:gap-2 shrink-0">
             <input
               type="text"
               value={inputText}
               onChange={handleInputChange}
-              placeholder={user ? 'Type a public message...' : 'Sign in to send a chat message...'}
+              placeholder={user ? 'Type a message...' : 'Sign in to chat...'}
               onClick={() => {
                 if (!user) openAuthModal('Sign in to chat with the Instangalog community');
               }}
-              className="flex-1 min-w-0 px-3 py-2 sm:px-4 sm:py-2.5 text-xs md:text-sm rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
+              className="flex-1 min-w-0 px-2.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
             />
 
-            {/* Bai PNG Button (No text, only PNG) */}
+            {/* Bai PNG Button (Compact on mobile) */}
             <button
               type="button"
               onClick={() => handleTriggerPngReaction('bai')}
               title="React Bai"
-              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90 shrink-0 select-none p-1"
+              className="w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90 shrink-0 select-none p-0.5"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -719,12 +788,12 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
               />
             </button>
 
-            {/* Pagpag PNG Button (No text, only PNG) */}
+            {/* Pagpag PNG Button (Compact on mobile) */}
             <button
               type="button"
               onClick={() => handleTriggerPngReaction('pagpag')}
               title="React Pagpag"
-              className="w-10 h-8 sm:w-11 sm:h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90 shrink-0 select-none p-0.5 overflow-visible"
+              className="w-8 h-7 sm:w-10 sm:h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90 shrink-0 select-none p-0.5 overflow-visible"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -737,7 +806,7 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
             <GlobalChatSoundboard
               isMuted={isMuted}
               onToggleMute={() => setIsMuted((prev) => !prev)}
-              onSoundTriggered={(sound) => {
+              onSoundTriggered={(sound, onEnded) => {
                 const myName = user?.display_name || user?.username || 'You';
                 setPlayingSoundToast({
                   senderName: myName,
@@ -752,15 +821,16 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
                 spawnFloatingSound(sound.label, myName);
 
                 // 2. Play local audio through smart mixer with dynamic ducking and concurrency limiter
-                playManagedSound(sound.url, sound.id);
+                playManagedSound(sound.url, sound.id, onEnded);
               }}
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-md disabled:opacity-50 transition-all active:scale-95 flex items-center gap-1 sm:gap-1.5 shrink-0"
+              title="Send message"
+              className="p-2 sm:px-4 sm:py-2.5 rounded-xl bg-black text-white dark:bg-white dark:text-black font-bold text-xs shadow-md disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-1 sm:gap-1.5 shrink-0"
             >
-              <span>Send</span>
+              <span className="hidden sm:inline">Send</span>
               <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </form>
