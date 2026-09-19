@@ -113,6 +113,16 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const soundToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeVoicesRef = useRef<{ id: string; soundId: string; audio: HTMLAudioElement }[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const activeWebVoicesRef = useRef<
+    {
+      id: string;
+      soundId: string;
+      sourceNode: AudioBufferSourceNode;
+      gainNode: GainNode;
+    }[]
+  >([]);
   const lastPlayedSoundTimesRef = useRef<Record<string, number>>({});
   const isMutedRef = useRef(isMuted);
 
@@ -120,6 +130,30 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   const activeTabRef = useRef(activeTab);
   const simpleModeRef = useRef(simpleMode);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const stopAllAudio = useCallback(() => {
+    // 1. Stop HTMLAudio voices
+    activeVoicesRef.current.forEach((v) => {
+      try {
+        v.audio.pause();
+        v.audio.currentTime = 0;
+      } catch {
+        // ignore
+      }
+    });
+    activeVoicesRef.current = [];
+
+    // 2. Stop Web Audio API voices
+    activeWebVoicesRef.current.forEach((v) => {
+      try {
+        v.sourceNode.stop();
+        v.sourceNode.disconnect();
+      } catch {
+        // ignore
+      }
+    });
+    activeWebVoicesRef.current = [];
+  }, []);
 
   useEffect(() => {
     simpleModeRef.current = simpleMode;
@@ -129,34 +163,18 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
   useEffect(() => {
     activeTabRef.current = activeTab;
     if (!simpleMode && activeTab !== 'chat') {
-      activeVoicesRef.current.forEach((v) => {
-        try {
-          v.audio.pause();
-          v.audio.currentTime = 0;
-        } catch {
-          // ignore
-        }
-      });
-      activeVoicesRef.current = [];
+      stopAllAudio();
     }
-  }, [activeTab, simpleMode]);
+  }, [activeTab, simpleMode, stopAllAudio]);
 
   // When navigating away from /chat or home (with simpleMode), immediately stop all playing soundboard audio
   useEffect(() => {
     pathnameRef.current = pathname;
     const isGlobalChatAllowed = simpleMode || pathname === '/chat' || pathname?.startsWith('/chat/');
     if (!isGlobalChatAllowed) {
-      activeVoicesRef.current.forEach((v) => {
-        try {
-          v.audio.pause();
-          v.audio.currentTime = 0;
-        } catch {
-          // ignore
-        }
-      });
-      activeVoicesRef.current = [];
+      stopAllAudio();
     }
-  }, [pathname, simpleMode]);
+  }, [pathname, simpleMode, stopAllAudio]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -231,122 +249,222 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
     return (pathnameRef.current === '/chat' || pathnameRef.current?.startsWith('/chat/')) && activeTabRef.current === 'chat';
   }, []);
 
-  // Smart Concurrency Limiter & Dynamic Ducking Audio Mixer
-  const playManagedSound = useCallback((soundUrl: string, soundId: string, onEnded?: () => void) => {
-    // Plays audio if user is inside Global Chat (either /chat page or embedded on Home)
-    const isInsideGlobalChat = checkIsInsideGlobalChat();
-    if (!isInsideGlobalChat || isMutedRef.current) {
-      onEnded?.();
-      return;
-    }
-
-    const now = Date.now();
-    const lastTime = lastPlayedSoundTimesRef.current[soundId] || 0;
-
-    // 1. Anti-Echo / Phasing Filter:
-    // If the EXACT same sound was started within 350ms, skip duplicate audio
-    // to avoid screeching robotic comb-filter echo.
-    if (now - lastTime < 350) {
-      onEnded?.();
-      return;
-    }
-    lastPlayedSoundTimesRef.current[soundId] = now;
-
-    // 2. Clean up ended or paused voices from pool
-    activeVoicesRef.current = activeVoicesRef.current.filter((voice) => {
-      return !voice.audio.ended && !voice.audio.paused;
-    });
-
-    // 3. Concurrency Limiter: Max 2 simultaneous voices
-    // If already at limit, gracefully stop the oldest voice
-    if (activeVoicesRef.current.length >= 2) {
-      const oldest = activeVoicesRef.current.shift();
-      if (oldest) {
-        try {
-          oldest.audio.volume = 0;
-          oldest.audio.pause();
-        } catch {
-          // ignore
-        }
+  // Smart Concurrency Limiter & Dynamic Ducking Audio Mixer (Supports Web Audio for iOS + HTMLAudio fallback)
+  const playManagedSound = useCallback(
+    async (soundUrl: string, soundId: string, onEnded?: () => void) => {
+      // Plays audio if user is inside Global Chat (either /chat page or embedded on Home)
+      const isInsideGlobalChat = checkIsInsideGlobalChat();
+      if (!isInsideGlobalChat || isMutedRef.current) {
+        onEnded?.();
+        return;
       }
-    }
 
-    // 4. Dynamic Volume Ducking (Inverse Multi-Speaker Scaling):
-    // 1 active sound = 0.85 (clear, punchy)
-    // 2 active sounds = dynamically duck down to 0.48 each so mix never clips or annoys
-    const activeCount = activeVoicesRef.current.length + 1;
-    const duckedVolume = activeCount === 1 ? 0.85 : 0.48;
+      const now = Date.now();
+      const lastTime = lastPlayedSoundTimesRef.current[soundId] || 0;
 
-    activeVoicesRef.current.forEach((voice) => {
+      // 1. Anti-Echo / Phasing Filter:
+      // If the EXACT same sound was started within 350ms, skip duplicate audio
+      // to avoid screeching robotic comb-filter echo.
+      if (now - lastTime < 350) {
+        onEnded?.();
+        return;
+      }
+      lastPlayedSoundTimesRef.current[soundId] = now;
+
+      // Ensure AudioContext is initialized/resumed if possible
       try {
-        voice.audio.volume = duckedVolume;
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass && !audioContextRef.current) {
+          audioContextRef.current = new AudioCtxClass();
+        }
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
       } catch {
         // ignore
       }
-    });
 
-    // 5. Play new sound instance
-    try {
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.setAttribute('playsinline', 'true');
-      audio.src = soundUrl;
-      audio.volume = duckedVolume;
-      const voiceInstance = {
-        id: `${now}-${Math.random()}`,
-        soundId,
-        audio,
-      };
-      activeVoicesRef.current.push(voiceInstance);
+      // Try Web Audio API first (Bypasses iOS WebKit async WebSocket autoplay block once context is warm!)
+      const ctx = audioContextRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        try {
+          // Concurrency Limiter: Max 2 simultaneous voices
+          if (activeWebVoicesRef.current.length >= 2) {
+            const oldest = activeWebVoicesRef.current.shift();
+            if (oldest) {
+              try {
+                oldest.sourceNode.stop();
+                oldest.sourceNode.disconnect();
+              } catch {
+                // ignore
+              }
+            }
+          }
 
-      let endedCalled = false;
-      const triggerEnded = () => {
-        if (!endedCalled) {
-          endedCalled = true;
-          onEnded?.();
+          let audioBuffer = audioBufferCacheRef.current.get(soundUrl);
+          if (!audioBuffer) {
+            const res = await fetch(soundUrl);
+            const arrayBuffer = await res.arrayBuffer();
+            audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+              ctx.decodeAudioData(arrayBuffer, resolve, reject);
+            });
+            audioBufferCacheRef.current.set(soundUrl, audioBuffer);
+          }
+
+          const activeCount = activeWebVoicesRef.current.length + 1;
+          const duckedVolume = activeCount === 1 ? 0.85 : 0.48;
+
+          activeWebVoicesRef.current.forEach((v) => {
+            try {
+              v.gainNode.gain.setValueAtTime(duckedVolume, ctx.currentTime);
+            } catch {
+              // ignore
+            }
+          });
+
+          const gainNode = ctx.createGain();
+          gainNode.gain.setValueAtTime(duckedVolume, ctx.currentTime);
+
+          const sourceNode = ctx.createBufferSource();
+          sourceNode.buffer = audioBuffer;
+          sourceNode.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          const voiceId = `${now}-${Math.random()}`;
+          const voiceObj = { id: voiceId, soundId, sourceNode, gainNode };
+          activeWebVoicesRef.current.push(voiceObj);
+
+          let endedCalled = false;
+          const triggerEnded = () => {
+            if (!endedCalled) {
+              endedCalled = true;
+              onEnded?.();
+            }
+          };
+
+          sourceNode.onended = () => {
+            activeWebVoicesRef.current = activeWebVoicesRef.current.filter((v) => v.id !== voiceId);
+            activeWebVoicesRef.current.forEach((v) => {
+              try {
+                v.gainNode.gain.setValueAtTime(0.85, ctx.currentTime);
+              } catch {
+                // ignore
+              }
+            });
+            triggerEnded();
+          };
+
+          sourceNode.start(0);
+          return; // Web Audio playback succeeded!
+        } catch (err) {
+          console.warn('[GlobalChat] Web Audio play fallback to HTMLAudio:', err);
         }
-      };
+      }
 
-      audio.onended = () => {
-        activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
-        activeVoicesRef.current.forEach((v) => {
+      // Fallback: Standard HTMLAudioElement
+      // 2. Clean up ended or paused voices from pool
+      activeVoicesRef.current = activeVoicesRef.current.filter((voice) => {
+        return !voice.audio.ended && !voice.audio.paused;
+      });
+
+      // 3. Concurrency Limiter: Max 2 simultaneous voices
+      if (activeVoicesRef.current.length >= 2) {
+        const oldest = activeVoicesRef.current.shift();
+        if (oldest) {
           try {
-            v.audio.volume = 0.85;
+            oldest.audio.volume = 0;
+            oldest.audio.pause();
           } catch {
             // ignore
           }
-        });
-        triggerEnded();
-      };
-
-      audio.onerror = () => {
-        activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
-        triggerEnded();
-      };
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('[GlobalChat] Audio play prevented by browser policy:', err);
-          triggerEnded();
-        });
+        }
       }
-    } catch (err) {
-      console.warn('[GlobalChat] Audio init error:', err);
-      onEnded?.();
-    }
-  }, [checkIsInsideGlobalChat]);
+
+      // 4. Dynamic Volume Ducking
+      const activeCount = activeVoicesRef.current.length + 1;
+      const duckedVolume = activeCount === 1 ? 0.85 : 0.48;
+
+      activeVoicesRef.current.forEach((voice) => {
+        try {
+          voice.audio.volume = duckedVolume;
+        } catch {
+          // ignore
+        }
+      });
+
+      // 5. Play new sound instance
+      try {
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.setAttribute('playsinline', 'true');
+        audio.src = soundUrl;
+        audio.volume = duckedVolume;
+        const voiceInstance = {
+          id: `${now}-${Math.random()}`,
+          soundId,
+          audio,
+        };
+        activeVoicesRef.current.push(voiceInstance);
+
+        let endedCalled = false;
+        const triggerEnded = () => {
+          if (!endedCalled) {
+            endedCalled = true;
+            onEnded?.();
+          }
+        };
+
+        audio.onended = () => {
+          activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
+          activeVoicesRef.current.forEach((v) => {
+            try {
+              v.audio.volume = 0.85;
+            } catch {
+              // ignore
+            }
+          });
+          triggerEnded();
+        };
+
+        audio.onerror = () => {
+          activeVoicesRef.current = activeVoicesRef.current.filter((v) => v.id !== voiceInstance.id);
+          triggerEnded();
+        };
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[GlobalChat] Audio play prevented by browser policy:', err);
+            triggerEnded();
+          });
+        }
+      } catch (err) {
+        console.warn('[GlobalChat] Audio init error:', err);
+        onEnded?.();
+      }
+    },
+    [checkIsInsideGlobalChat]
+  );
 
   useEffect(() => {
     // Unlock browser audio permissions on user's first click/touch anywhere
     const unlockAudio = () => {
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          if (ctx.state === 'suspended') {
-            ctx.resume();
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          if (!audioContextRef.current) {
+            audioContextRef.current = new AudioCtxClass();
           }
+          if (audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume();
+          }
+          // Warm up Web Audio engine on iOS WebKit with 1-frame silent buffer during direct user interaction
+          const ctx = audioContextRef.current;
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.start(0);
         }
       } catch {
         // ignore
@@ -354,27 +472,23 @@ export function GlobalChatDrawer({ className, simpleMode = false }: GlobalChatDr
       window.removeEventListener('click', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
       window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio);
     };
 
     window.addEventListener('click', unlockAudio, { once: true });
     window.addEventListener('keydown', unlockAudio, { once: true });
     window.addEventListener('touchstart', unlockAudio, { once: true });
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
 
     return () => {
       window.removeEventListener('click', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
       window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio);
       if (soundToastTimeoutRef.current) clearTimeout(soundToastTimeoutRef.current);
-      activeVoicesRef.current.forEach((v) => {
-        try {
-          v.audio.pause();
-        } catch {
-          // ignore
-        }
-      });
-      activeVoicesRef.current = [];
+      stopAllAudio();
     };
-  }, []);
+  }, [stopAllAudio]);
 
   useEffect(() => {
     // Fetch initial message history
