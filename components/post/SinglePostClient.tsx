@@ -12,9 +12,10 @@ import { MusicCard } from '@/components/music/MusicCard';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { ReportModal } from '@/components/modals/ReportModal';
 import { ReportTargetType } from '@/types/report';
-import { Heart, MessageCircle, Share2, ShieldCheck, Calendar, Flag, ArrowLeft } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ShieldCheck, Calendar, Flag, ArrowLeft, Edit3, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { EditPostModal } from '@/components/modals/EditPostModal';
 
 import { recordPostView } from '@/lib/services/viewService';
 
@@ -25,7 +26,16 @@ interface SinglePostClientProps {
 export function SinglePostClient({ initialPost }: SinglePostClientProps) {
   const router = useRouter();
   const { user, openAuthModal } = useAuthStore();
-  const [post] = useState<Post>(initialPost);
+  const [post, setPost] = useState<Post>(initialPost);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  const SUPER_ADMIN_EMAIL = 'johnwilbertgamis2022@gmail.com';
+  const canEdit = Boolean(
+    user && (
+      user.id === post.user_id ||
+      user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+    )
+  );
 
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{ type: ReportTargetType; id: string; title?: string } | null>(null);
@@ -104,6 +114,7 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
             }
             setActiveCommentPostId(postId);
           }}
+          onEdit={() => setShowEditModal(true)}
         />
       ) : (
         <div className="p-5 sm:p-6 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white space-y-4 shadow-xl">
@@ -138,6 +149,25 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
                 </p>
               </div>
             </Link>
+
+            <div className="flex items-center gap-2">
+              {post.visibility === 'private' && (
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Only Me</span>
+                </span>
+              )}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(true)}
+                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
+                  title="Edit or Delete Post"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Caption Text */}
@@ -249,6 +279,24 @@ export function SinglePostClient({ initialPost }: SinglePostClientProps) {
           targetType={reportTarget.type}
           targetId={reportTarget.id}
           targetTitle={reportTarget.title}
+        />
+      )}
+
+      {/* Edit or Delete Post Modal */}
+      {showEditModal && (
+        <EditPostModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          post={post}
+          onPostUpdated={(updated) => {
+            setPost(updated);
+            setShowEditModal(false);
+          }}
+          onPostDeleted={() => {
+            setShowEditModal(false);
+            showAlert('Post has been deleted.', 'Deleted', 'info');
+            router.push('/');
+          }}
         />
       )}
     </div>

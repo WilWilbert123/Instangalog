@@ -5,6 +5,8 @@ import { Post } from '@/types/post';
 import { VideoCard } from './VideoCard';
 import { CommentDrawer } from '@/components/comments/CommentDrawer';
 import { organizeSmartFeed, markVideoAsWatched } from '@/lib/utils/watchedVideoManager';
+import { useAuthStore } from '@/stores/authStore';
+import { SUPER_ADMIN_EMAIL } from '@/lib/services/postService';
 import { RotateCw } from 'lucide-react';
 
 interface VerticalFeedProps {
@@ -12,6 +14,7 @@ interface VerticalFeedProps {
 }
 
 export function VerticalFeed({ posts }: VerticalFeedProps) {
+  const { user } = useAuthStore();
   const [displayPosts, setDisplayPosts] = useState<Post[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -19,15 +22,31 @@ export function VerticalFeed({ posts }: VerticalFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const watchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize and organize posts on mount or when posts change
+  // Initialize and organize posts on mount or when posts change:
+  // Automatically shows unseen fresh videos first, watched videos after,
+  // and rotates automatically like TikTok so feed is always fresh.
   const refreshFeedList = useCallback((rawPosts: Post[]) => {
-    const organized = organizeSmartFeed(rawPosts);
+    // 1. Strict Privacy Filter: If post is private, only author & Super Admin can see
+    const visiblePosts = rawPosts.filter((p) => {
+      if (p.visibility === 'private') {
+        const isAuthor = Boolean(user && p.user_id === user.id);
+        const isSuperAdmin = Boolean(user && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+        if (!isAuthor && !isSuperAdmin) return false;
+      }
+      return true;
+    });
+
+    // 2. TikTok Auto-Fresh Smart Feed: fresh unseen first, auto-rotated
+    const organized = organizeSmartFeed(visiblePosts, {
+      userId: user?.id,
+    });
+
     setDisplayPosts(organized);
     setActiveIndex(0);
     if (containerRef.current) {
       containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     refreshFeedList(posts);
@@ -81,18 +100,18 @@ export function VerticalFeed({ posts }: VerticalFeedProps) {
     };
   }, [activeIndex, displayPosts]);
 
-  if (!posts || posts.length === 0) {
+  if (!displayPosts || displayPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 text-slate-400">
         <p className="text-lg font-semibold text-white">No videos available</p>
-        <p className="text-sm mt-1">Check back soon for new public video posts!</p>
+        <p className="text-sm mt-1">Check back soon for new video posts!</p>
       </div>
     );
   }
 
   return (
     <div className="relative w-full h-full flex flex-col items-center">
-      {/* Floating Refresh Rotating Icon Indicator (No Text/Emojis) */}
+      {/* Floating Refresh Rotating Icon Indicator */}
       {showRefreshToast && (
         <div className="absolute top-3 z-50 flex items-center justify-center p-2.5 rounded-full bg-orange-600/90 dark:bg-orange-500/90 text-white shadow-2xl backdrop-blur-md border border-white/20">
           <RotateCw className="w-5 h-5 text-white animate-spin" />

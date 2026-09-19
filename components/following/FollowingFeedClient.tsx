@@ -35,9 +35,18 @@ import {
   Flag,
   Upload,
   X,
+  Globe,
+  Lock,
+  Edit3,
+  Eye,
+  EyeOff,
+  RotateCcw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { EditPostModal } from '@/components/modals/EditPostModal';
+import { SUPER_ADMIN_EMAIL } from '@/lib/services/postService';
+import { getSeenPostIds, markPostAsSeen, clearSeenPostHistory } from '@/lib/utils/watchedVideoManager';
 
 interface FollowingFeedClientProps {
   initialPosts: Post[];
@@ -56,12 +65,28 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   const [caption, setCaption] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [hashtags, setHashtags] = useState('');
+  const [postVisibility, setPostVisibility] = useState<'public' | 'private'>('public');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessNotice, setShowSuccessNotice] = useState(false);
   const [lastSubmittedType, setLastSubmittedType] = useState<PostType>('status');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit Post Modal State
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+
+  // Smart Seen/Unseen Feed Filter State
+  const [hideSeenPosts, setHideSeenPosts] = useState(false);
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => getSeenPostIds(user?.id));
+
+  React.useEffect(() => {
+    const handleSeenUpdate = () => {
+      setSeenIds(getSeenPostIds(user?.id));
+    };
+    window.addEventListener('post-seen-updated', handleSeenUpdate);
+    return () => window.removeEventListener('post-seen-updated', handleSeenUpdate);
+  }, [user?.id]);
 
   // Active Comment Drawer & Report Modal
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
@@ -217,7 +242,7 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
         type: postType,
         caption: caption.trim(),
         hashtags: hashtagList,
-        visibility: 'public',
+        visibility: postVisibility,
         author: {
           id: user.id,
           username: user.username,
@@ -288,8 +313,23 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
   };
 
   const filteredPosts = posts.filter((p) => {
+    // 1. Type matching
     const matchesType = activeFilter === 'all' || p.type === activeFilter;
     if (!matchesType) return false;
+
+    // 2. Strict Privacy Check: Only author and Super Admin can see private posts
+    if (p.visibility === 'private') {
+      const isAuthor = Boolean(user && p.user_id === user.id);
+      const isSuperAdmin = Boolean(user && user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+      if (!isAuthor && !isSuperAdmin) return false;
+    }
+
+    // 3. Seen post filter (Facebook-style feed)
+    if (hideSeenPosts && seenIds.has(p.id)) {
+      return false;
+    }
+
+    // 4. Search query
     if (!searchQueryParam.trim()) return true;
     const q = searchQueryParam.toLowerCase();
     const caption = (p.caption || '').toLowerCase();
@@ -334,23 +374,55 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-4 py-2 text-xs font-bold rounded-xl bg-black text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1.5 shrink-0"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {uploadProgress !== null && <span>{uploadProgress}%</span>}
-              </>
-            ) : (
-              <>
-                <Send className="w-3.5 h-3.5" />
-                <span>Publish</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Quick Visibility Selector */}
+            <div className="flex items-center p-0.5 sm:p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPostVisibility('public')}
+                title="Public (Everyone can see)"
+                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                  postVisibility === 'public'
+                    ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm'
+                    : 'text-slate-500 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[10px]">Public</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPostVisibility('private')}
+                title="Only Me / Private (You & Super Admin)"
+                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                  postVisibility === 'private'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[10px]">Only Me</span>
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-xs font-bold rounded-xl bg-black text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1.5 shrink-0"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {uploadProgress !== null && <span>{uploadProgress}%</span>}
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Publish</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Post Type Selector */}
@@ -548,6 +620,36 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
             <span>{label}</span>
           </button>
         ))}
+
+        <div className="ml-auto flex items-center gap-1.5 shrink-0 pl-2">
+          <button
+            type="button"
+            onClick={() => setHideSeenPosts((prev) => !prev)}
+            className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border shrink-0 ${
+              hideSeenPosts
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md'
+                : 'bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-black dark:hover:text-white'
+            }`}
+            title="Toggle hiding posts you have already viewed"
+          >
+            {hideSeenPosts ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{hideSeenPosts ? 'Hiding Seen' : 'All Posts'}</span>
+          </button>
+
+          {seenIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                clearSeenPostHistory(user?.id);
+                setSeenIds(new Set());
+              }}
+              className="p-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors shrink-0"
+              title="Reset Seen Posts History"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Posts List */}
@@ -627,9 +729,34 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
                     </div>
                   </Link>
 
-                  <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
-                    Following
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {post.visibility === 'private' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
+                        <Lock className="w-3 h-3" />
+                        <span>Only Me</span>
+                      </span>
+                    )}
+
+                    {Boolean(
+                      user && (
+                        user.id === post.user_id ||
+                        user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+                      )
+                    ) && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingPost(post)}
+                        className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
+                        title="Edit Caption & Privacy"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
+                      Following
+                    </span>
+                  </div>
                 </div>
 
                 {/* Caption Text */}
@@ -749,6 +876,23 @@ export function FollowingFeedClient({ initialPosts }: FollowingFeedClientProps) 
           targetType={reportTarget.type}
           targetId={reportTarget.id}
           targetTitle={reportTarget.title}
+        />
+      )}
+
+      {/* Edit Post Modal */}
+      {editingPost && (
+        <EditPostModal
+          isOpen={Boolean(editingPost)}
+          onClose={() => setEditingPost(null)}
+          post={editingPost}
+          onPostUpdated={(updated) => {
+            setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+            setEditingPost(null);
+          }}
+          onPostDeleted={(deletedId) => {
+            setPosts((prev) => prev.filter((p) => p.id !== deletedId));
+            setEditingPost(null);
+          }}
         />
       )}
     </div>

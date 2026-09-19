@@ -7,18 +7,27 @@ import { useAuthStore } from '@/stores/authStore';
 import { useModalStore } from '@/stores/modalStore';
 import { togglePostLike } from '@/lib/services/postService';
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
-import { Play, Pause, Heart, MessageCircle, Share2, Disc, ShieldCheck } from 'lucide-react';
+import { Play, Pause, Heart, MessageCircle, Share2, Disc, ShieldCheck, Edit3, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 interface MusicCardProps {
   post: Post;
   onOpenComments?: (postId: string) => void;
+  onEdit?: (post: Post) => void;
 }
 
-export function MusicCard({ post, onOpenComments }: MusicCardProps) {
+export function MusicCard({ post, onOpenComments, onEdit }: MusicCardProps) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
   const { user, openAuthModal } = useAuthStore();
   const music = post.music;
+
+  const SUPER_ADMIN_EMAIL = 'johnwilbertgamis2022@gmail.com';
+  const canEdit = Boolean(
+    user && (
+      user.id === post.user_id ||
+      user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+    )
+  );
 
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes_count || 0);
@@ -115,9 +124,27 @@ export function MusicCard({ post, onOpenComments }: MusicCardProps) {
             <p className="text-[10px] text-slate-500 dark:text-slate-400">@{author.username}</p>
           </div>
         </Link>
-        <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-          {music.genre || 'Music Audio'}
-        </span>
+        <div className="flex items-center gap-2">
+          {post.visibility === 'private' && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              <span>Only Me</span>
+            </span>
+          )}
+          {canEdit && onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(post)}
+              className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
+              title="Edit or Delete Track"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <span className="px-3 py-1 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            {music.genre || 'Music Audio'}
+          </span>
+        </div>
       </div>
 
       {/* Music Box / Vinyl Track Player Card */}

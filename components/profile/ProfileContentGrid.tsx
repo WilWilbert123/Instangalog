@@ -21,8 +21,11 @@ import {
   Eye,
   ExternalLink,
   Play,
+  Edit3,
+  Lock,
 } from 'lucide-react';
 import Link from 'next/link';
+import { EditPostModal } from '@/components/modals/EditPostModal';
 
 interface ProfileContentGridProps {
   posts: Post[];
@@ -31,6 +34,15 @@ interface ProfileContentGridProps {
 
 export function ProfileContentGrid({ posts, username }: ProfileContentGridProps) {
   const { user, openAuthModal } = useAuthStore();
+  const SUPER_ADMIN_EMAIL = 'johnwilbertgamis2022@gmail.com';
+
+  const [allPosts, setAllPosts] = useState<Post[]>(posts);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+
+  React.useEffect(() => {
+    setAllPosts(posts);
+  }, [posts]);
+
   const [activeTab, setActiveTab] = useState<'all' | PostType>('all');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
 
@@ -97,7 +109,7 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
     }
   };
 
-  const filteredPosts = posts.filter((p) => {
+  const filteredPosts = allPosts.filter((p) => {
     if (activeTab === 'all') return true;
     return p.type === activeTab;
   });
@@ -159,9 +171,17 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
                     }
                     setActiveCommentPostId(pId);
                   }}
+                  onEdit={(p) => setEditingPost(p)}
                 />
               );
             }
+
+            const canEdit = Boolean(
+              user && (
+                user.id === post.user_id ||
+                user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+              )
+            );
 
             return (
               <div
@@ -170,6 +190,31 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
                 className="p-5 rounded-3xl glass-card border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 text-slate-900 dark:text-white space-y-4 shadow-lg flex flex-col justify-between"
               >
                 <div className="space-y-3">
+                  {/* Top Bar for Privacy & Author Controls */}
+                  {(post.visibility === 'private' || canEdit) && (
+                    <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-100 dark:border-slate-800/60">
+                      <div>
+                        {post.visibility === 'private' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
+                            <Lock className="w-3 h-3" />
+                            <span>Only Me</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPost(post)}
+                          className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-500 transition-colors"
+                          title="Edit or Delete Post"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Caption */}
                   {post.caption && (
                     <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
@@ -278,10 +323,27 @@ export function ProfileContentGrid({ posts, username }: ProfileContentGridProps)
       {activeCommentPostId && (
         <CommentDrawer
           postId={activeCommentPostId}
-          postAuthorId={posts.find((p) => p.id === activeCommentPostId)?.user_id || posts.find((p) => p.id === activeCommentPostId)?.author?.id}
+          postAuthorId={allPosts.find((p) => p.id === activeCommentPostId)?.user_id || allPosts.find((p) => p.id === activeCommentPostId)?.author?.id}
           onClose={() => setActiveCommentPostId(null)}
           onCommentAdded={(pId, count) => {
             setCommentsCountMap((prev) => ({ ...prev, [pId]: count }));
+          }}
+        />
+      )}
+
+      {/* Edit or Delete Post Modal */}
+      {editingPost && (
+        <EditPostModal
+          isOpen={Boolean(editingPost)}
+          onClose={() => setEditingPost(null)}
+          post={editingPost}
+          onPostUpdated={(updated) => {
+            setAllPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+            setEditingPost(null);
+          }}
+          onPostDeleted={(deletedId) => {
+            setAllPosts((prev) => prev.filter((p) => p.id !== deletedId));
+            setEditingPost(null);
           }}
         />
       )}
