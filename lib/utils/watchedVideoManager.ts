@@ -89,7 +89,7 @@ export function getSeenPosts(posts: Post[], userId?: string): Post[] {
  */
 export function organizeSmartFeed(
   posts: Post[],
-  options?: { hideSeen?: boolean; userId?: string }
+  options?: { hideSeen?: boolean; userId?: string; seed?: number }
 ): Post[] {
   if (!posts || posts.length === 0) return [];
 
@@ -97,8 +97,15 @@ export function organizeSmartFeed(
   const unwatched = posts.filter((p) => !seenIds.has(p.id));
   const watched = posts.filter((p) => seenIds.has(p.id));
 
+  // If hideSeen is enabled and there are unseen posts, show only fresh unseen posts
   if (options?.hideSeen) {
-    return unwatched;
+    if (unwatched.length > 0) {
+      return unwatched;
+    }
+    // If all posts have been viewed, rotate them smoothly by seed so the feed is never blank on refresh
+    const rotationSeed = options?.seed ?? (new Date().getHours() * 60 + new Date().getMinutes());
+    const offset = posts.length > 0 ? (rotationSeed % posts.length) : 0;
+    return [...posts.slice(offset), ...posts.slice(0, offset)];
   }
 
   // If there are unwatched posts, prioritize unwatched first, then watched
@@ -106,8 +113,9 @@ export function organizeSmartFeed(
     return [...unwatched, ...watched];
   }
 
-  // If all watched and hideSeen is false, rotate by hour for variety
-  const seed = new Date().getHours() % posts.length;
+  // If all watched and hideSeen is false, rotate by seed for variety
+  const rotationSeed = options?.seed ?? (new Date().getHours() * 60 + new Date().getMinutes());
+  const seed = posts.length > 0 ? (rotationSeed % posts.length) : 0;
   return [...posts.slice(seed), ...posts.slice(0, seed)];
 }
 
