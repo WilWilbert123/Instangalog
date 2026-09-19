@@ -5,7 +5,7 @@ import { PostType } from '@/types/post';
 import { createPost } from '@/lib/services/postService';
 import { uploadVideoToCloudinary, uploadImageToCloudinary } from '@/lib/services/cloudinary';
 import { useAuthStore } from '@/stores/authStore';
-import { Video, Image as ImageIcon, Music, Type, Clock, ShieldAlert, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { Video, Image as ImageIcon, Music, Type, Clock, ShieldAlert, Upload, Loader2, CheckCircle2, Globe, Lock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
@@ -18,6 +18,7 @@ export function UploadTabs() {
   const [caption, setCaption] = useState('');
   const [hashtagsInput, setHashtagsInput] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [uploadPercent, setUploadPercent] = useState<number>(0);
@@ -108,7 +109,7 @@ export function UploadTabs() {
         type: activeTab,
         caption,
         hashtags,
-        visibility: 'public',
+        visibility,
         author: {
           id: user.id,
           username: user.username,
@@ -327,6 +328,46 @@ export function UploadTabs() {
             required
             className="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
           />
+        </div>
+
+        {/* Privacy & Visibility Selector */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            Privacy & Visibility
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setVisibility('public')}
+              className={`p-3 rounded-2xl text-left border transition-all flex items-center gap-2.5 ${
+                visibility === 'public'
+                  ? 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-400'
+              }`}
+            >
+              <Globe className="w-4 h-4 shrink-0" />
+              <div>
+                <p className="text-xs font-bold leading-tight">Public</p>
+                <p className="text-[10px] opacity-75">Visible to everyone</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setVisibility('private')}
+              className={`p-3 rounded-2xl text-left border transition-all flex items-center gap-2.5 ${
+                visibility === 'private'
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-400'
+              }`}
+            >
+              <Lock className="w-4 h-4 shrink-0" />
+              <div>
+                <p className="text-xs font-bold leading-tight">Only Me / Private</p>
+                <p className="text-[10px] opacity-75">Only you & Super Admin</p>
+              </div>
+            </button>
+          </div>
         </div>
         {/* Live Percentage Progress Bar */}
         {isSubmitting && (

@@ -6,7 +6,12 @@ import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { ensureValidUuid } from '@/lib/utils/uuid';
 import { getSystemSettings, scanSpamContent } from '@/lib/services/systemSettings';
 
-export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
+export const SUPER_ADMIN_EMAIL = 'johnwilbertgamis2022@gmail.com';
+
+export async function getApprovedPosts(
+  type?: PostType,
+  currentUser?: { id?: string; email?: string } | null
+): Promise<Post[]> {
   try {
     let query = supabase
       .from('posts')
@@ -18,9 +23,20 @@ export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
         music:music(*),
         status:statuses(*)
       `)
-      .eq('visibility', 'public')
       .eq('moderation_status', 'approved')
       .order('created_at', { ascending: false });
+
+    const isSuperAdmin = currentUser?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
+    if (isSuperAdmin) {
+      // Super Admin (johnwilbertgamis2022@gmail.com) sees all approved posts (both public and private)
+    } else if (currentUser?.id) {
+      // Logged-in user sees all public posts PLUS their own private posts
+      query = query.or(`visibility.eq.public,and(visibility.eq.private,user_id.eq.${currentUser.id})`);
+    } else {
+      // General community sees only public posts
+      query = query.eq('visibility', 'public');
+    }
 
     if (type) {
       query = query.eq('type', type);
@@ -35,15 +51,24 @@ export async function getApprovedPosts(type?: PostType): Promise<Post[]> {
     // Supabase query error
   }
 
-  let fallback = MOCK_POSTS.filter((p) => p.visibility === 'public' && p.moderation_status === 'approved');
+  let fallback = MOCK_POSTS.filter((p) => {
+    if (p.moderation_status !== 'approved') return false;
+    const isSuperAdmin = currentUser?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+    if (isSuperAdmin) return true;
+    if (currentUser?.id && p.visibility === 'private') {
+      return p.user_id === currentUser.id;
+    }
+    return p.visibility === 'public';
+  });
+
   if (type) {
     fallback = fallback.filter((p) => p.type === type);
   }
   return fallback;
 }
 
-export async function getFYPVideos(): Promise<Post[]> {
-  const posts = await getApprovedPosts('video');
+export async function getFYPVideos(currentUser?: { id?: string; email?: string } | null): Promise<Post[]> {
+  const posts = await getApprovedPosts('video', currentUser);
   return posts.filter((p) => p.video);
 }
 
@@ -200,7 +225,7 @@ export async function createPost(postData: Partial<Post>): Promise<Post> {
         type: postData.type || 'video',
         caption: postData.caption || '',
         hashtags: postData.hashtags || [],
-        visibility: 'public',
+        visibility: postData.visibility || 'public',
         moderation_status: moderationStatus,
       })
       .select()
@@ -329,3 +354,153 @@ export async function togglePostLike(postId: string, userId: string, currentlyLi
     throw err;
   }
 }
+
+export interface UpdatePostPayload {
+  caption?: string;
+  hashtags?: string[];
+  visibility?: 'public' | 'followers' | 'private';
+}
+
+export async function updatePost(
+  postId: string,
+  updates: UpdatePostPayload,
+  requestingUserId: string,
+  requestingUserEmail?: string
+): Promise<Post> {
+  if (typeof window !== 'undefined') {
+    const res = await fetch('/api/posts/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        postId,
+        updates,
+        userId: requestingUserId,
+        userEmail: requestingUserEmail,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error(json.error || 'Failed to update post');
+    }
+    return json.post as Post;
+  }
+
+  const validUserId = ensureValidUuid(requestingUserId);
+  const isSuperAdmin = requestingUserEmail?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
+  // 1. Fetch existing post
+  const { data: existing, error: fetchErr } = await (supabaseAdmin.from('posts') as any)
+    .select('id, user_id, type')
+    .eq('id', postId)
+    .maybeSingle();
+
+  if (fetchErr || !existing) {
+    throw new Error('Post not found.');
+  }
+
+  // 2. Ownership verification: must be author or superadmin
+  if (existing.user_id !== validUserId && !isSuperAdmin) {
+    throw new Error('You do not have permission to edit this post.');
+  }
+
+  // 3. Anti-Spam check if caption changed
+  if (updates.caption) {
+    const settings = await getSystemSettings();
+    if (settings.enableSpamFilter && scanSpamContent(updates.caption)) {
+      throw new Error('Post caption blocked by Anti-Spam Safety Filter.');
+    }
+  }
+
+  const updateFields: any = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.caption !== undefined) updateFields.caption = updates.caption;
+  if (updates.hashtags !== undefined) updateFields.hashtags = updates.hashtags;
+  if (updates.visibility !== undefined) updateFields.visibility = updates.visibility;
+
+  const { error: updateErr } = await (supabaseAdmin.from('posts') as any)
+    .update(updateFields)
+    .eq('id', postId);
+
+  if (updateErr) {
+    console.error('[updatePost error]:', updateErr.message);
+    throw new Error(`Failed to update post: ${updateErr.message}`);
+  }
+
+  const updated = await getPostById(postId);
+  if (!updated) {
+    throw new Error('Failed to retrieve updated post.');
+  }
+  return updated;
+}
+
+export async function deletePost(
+  postId: string,
+  requestingUserId: string,
+  requestingUserEmail?: string
+): Promise<{ success: boolean; postId: string }> {
+  if (typeof window !== 'undefined') {
+    const res = await fetch('/api/posts/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        postId,
+        userId: requestingUserId,
+        userEmail: requestingUserEmail,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error(json.error || 'Failed to delete post');
+    }
+    return { success: true, postId };
+  }
+
+  const validUserId = ensureValidUuid(requestingUserId);
+  const isSuperAdmin = requestingUserEmail?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
+  // 1. Fetch existing post to verify ownership
+  const { data: existing, error: fetchErr } = await (supabaseAdmin.from('posts') as any)
+    .select('id, user_id')
+    .eq('id', postId)
+    .maybeSingle();
+
+  if (fetchErr || !existing) {
+    throw new Error('Post not found.');
+  }
+
+  if (existing.user_id !== validUserId && !isSuperAdmin) {
+    throw new Error('You do not have permission to delete this post.');
+  }
+
+  // 2. Delete post (CASCADE automatically deletes from videos, images, music, statuses, likes, comments)
+  const { error: delErr } = await (supabaseAdmin.from('posts') as any)
+    .delete()
+    .eq('id', postId);
+
+  if (delErr) {
+    console.error('[deletePost error]:', delErr.message);
+    throw new Error(`Failed to delete post: ${delErr.message}`);
+  }
+
+  // 3. Decrement author profile posts_count
+  try {
+    const { data: prof } = await (supabaseAdmin.from('profiles') as any)
+      .select('posts_count')
+      .eq('id', existing.user_id)
+      .maybeSingle();
+
+    if (prof && typeof prof.posts_count === 'number') {
+      await (supabaseAdmin.from('profiles') as any)
+        .update({ posts_count: Math.max(0, prof.posts_count - 1) })
+        .eq('id', existing.user_id);
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return { success: true, postId };
+}
+
+

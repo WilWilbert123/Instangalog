@@ -5,10 +5,12 @@ import { Post } from '@/types/post';
 import { useAuthStore } from '@/stores/authStore';
 import { useModalStore } from '@/stores/modalStore';
 import { togglePostLike } from '@/lib/services/postService';
-import { Heart, MessageCircle, Share2, Music2, Play, Pause, Volume2, VolumeX, Eye, AlertCircle, Flag } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Music2, Play, Pause, Volume2, VolumeX, Eye, AlertCircle, Flag, Edit3, Lock } from 'lucide-react';
 import { getAvatarUrl, getCartoonAvatar } from '@/lib/utils/avatar';
 import Link from 'next/link';
 import { ReportModal } from '@/components/modals/ReportModal';
+import { EditPostModal } from '@/components/modals/EditPostModal';
+import { SUPER_ADMIN_EMAIL } from '@/lib/services/postService';
 
 import { parseMediaUrl } from '@/lib/utils/mediaEmbed';
 import { recordPostView } from '@/lib/services/viewService';
@@ -33,6 +35,26 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
   const [hasVideoError, setHasVideoError] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isInView, setIsInView] = useState(false);
+
+  // Editable caption, visibility, and hashtags
+  const [currentCaption, setCurrentCaption] = useState(post.caption || '');
+  const [currentVisibility, setCurrentVisibility] = useState(post.visibility || 'public');
+  const [currentHashtags, setCurrentHashtags] = useState<string[]>(post.hashtags || []);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
+
+  const canEdit = Boolean(
+    user && (
+      user.id === post.user_id ||
+      user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+    )
+  );
+
+  useEffect(() => {
+    setCurrentCaption(post.caption || '');
+    setCurrentVisibility(post.visibility || 'public');
+    setCurrentHashtags(post.hashtags || []);
+  }, [post.caption, post.visibility, post.hashtags]);
 
   useEffect(() => {
     setLikesCount(post.likes_count || 0);
@@ -196,6 +218,8 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
     avatar_url: '',
   };
 
+  if (isDeleted) return null;
+
   return (
     <div ref={cardRef} className="relative w-full h-[calc(100dvh-8rem)] md:h-[calc(100vh-5rem)] max-w-lg mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
       {/* Video Element or Embeddable iframe (YouTube, Facebook, TikTok, Instagram, etc.) or Error Poster Fallback */}
@@ -312,15 +336,22 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
           >
             {isFollowing ? 'Following' : 'Follow'}
           </button>
+
+          {currentVisibility === 'private' && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-bold shadow-md backdrop-blur-sm border border-amber-400/40">
+              <Lock className="w-3 h-3" />
+              <span>Only Me</span>
+            </span>
+          )}
         </div>
 
         {/* Caption */}
-        <p className="text-sm text-slate-100 font-normal leading-snug line-clamp-3">{post.caption}</p>
+        <p className="text-sm text-slate-100 font-normal leading-snug line-clamp-3">{currentCaption}</p>
 
         {/* Hashtags */}
-        {post.hashtags && post.hashtags.length > 0 && (
+        {currentHashtags && currentHashtags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {post.hashtags.map((tag) => (
+            {currentHashtags.map((tag) => (
               <span key={tag} className="text-xs font-medium text-slate-300">
                 #{tag}
               </span>
@@ -389,6 +420,24 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
           </span>
         </div>
 
+        {/* Edit Button (Author or Super Admin) */}
+        {canEdit && (
+          <div className="flex flex-col items-center gap-0.5 sm:gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEditModal(true);
+              }}
+              className="p-2 sm:p-3.5 rounded-full bg-amber-500/90 hover:bg-amber-600 text-white border border-amber-400/40 transition-colors shadow-lg"
+              aria-label="Edit post"
+              title="Edit Caption & Privacy"
+            >
+              <Edit3 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+            </button>
+            <span className="text-[8px] sm:text-[9px] font-bold text-amber-300 drop-shadow-md">Edit</span>
+          </div>
+        )}
+
         {/* Report Button */}
         <div className="flex flex-col items-center gap-0.5 sm:gap-1">
           <button
@@ -413,6 +462,30 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
         </div>
       </div>
 
+      {/* Edit Video Modal */}
+      {showEditModal && (
+        <EditPostModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          post={{
+            ...post,
+            caption: currentCaption,
+            visibility: currentVisibility,
+            hashtags: currentHashtags,
+          }}
+          onPostUpdated={(updated) => {
+            setCurrentCaption(updated.caption);
+            setCurrentVisibility(updated.visibility);
+            setCurrentHashtags(updated.hashtags || []);
+          }}
+          onPostDeleted={(deletedId) => {
+            setIsDeleted(true);
+            setShowEditModal(false);
+            window.dispatchEvent(new CustomEvent('refresh-fyp-feed'));
+          }}
+        />
+      )}
+
       {/* Report Video Modal */}
       {showReportModal && (
         <ReportModal
@@ -420,7 +493,7 @@ export function VideoCard({ post, isActive, onOpenComments }: VideoCardProps) {
           onClose={() => setShowReportModal(false)}
           targetType="video"
           targetId={post.id}
-          targetTitle={post.caption}
+          targetTitle={currentCaption || post.caption}
         />
       )}
     </div>

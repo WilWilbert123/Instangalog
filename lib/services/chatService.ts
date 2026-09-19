@@ -19,6 +19,24 @@ export interface TypingUser {
   displayName: string;
 }
 
+export interface SoundBroadcastPayload {
+  soundId: string;
+  soundName: string;
+  soundUrl: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar?: string;
+  timestamp: number;
+}
+
+export interface FloatingReactionPayload {
+  reactionId: 'bai' | 'pagpag';
+  imageUrl: string;
+  senderId: string;
+  senderName: string;
+  timestamp: number;
+}
+
 // ---------------------------------------------------------------------------
 // Fetch the last 60 messages with author profile joined
 // ---------------------------------------------------------------------------
@@ -243,7 +261,9 @@ export function subscribeToGlobalChat(
   onNewMessage: (message: ChatMessage) => void,
   onTypingStatusChange: (typingUsers: TypingUser[]) => void,
   onPresenceChange: (onlineCount: number) => void,
-  onRacePositionChange?: (data: any) => void
+  onRacePositionChange?: (data: any) => void,
+  onSoundEffect?: (payload: SoundBroadcastPayload) => void,
+  onFloatingReaction?: (payload: FloatingReactionPayload) => void
 ): () => void {
   const activeTypingMap = new Map<string, { displayName: string; timeout: ReturnType<typeof setTimeout> }>();
 
@@ -371,6 +391,22 @@ export function subscribeToGlobalChat(
       }
     })
     // ---------------------------------------------------------------
+    // 3.5. Real-time Sound Effect Broadcast
+    // ---------------------------------------------------------------
+    .on('broadcast', { event: 'sound_effect' }, (payload) => {
+      if (onSoundEffect && payload.payload) {
+        onSoundEffect(payload.payload as SoundBroadcastPayload);
+      }
+    })
+    // ---------------------------------------------------------------
+    // 3.6. Real-time Floating Image Reaction Broadcast
+    // ---------------------------------------------------------------
+    .on('broadcast', { event: 'floating_reaction' }, (payload) => {
+      if (onFloatingReaction && payload.payload) {
+        onFloatingReaction(payload.payload as FloatingReactionPayload);
+      }
+    })
+    // ---------------------------------------------------------------
     // 4. Presence → online user count
     // ---------------------------------------------------------------
     .on('presence', { event: 'sync' }, emitPresenceCount)
@@ -488,3 +524,37 @@ export function sendRaceProgressBroadcast(payload: {
     payload,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Broadcast sound effect to all clients currently connected to global chat
+// ---------------------------------------------------------------------------
+export function sendSoundBroadcast(payload: SoundBroadcastPayload): boolean {
+  if (!chatChannel || !channelReady) {
+    console.warn('[Chat] Cannot broadcast sound — realtime channel not ready');
+    return false;
+  }
+  chatChannel.send({
+    type: 'broadcast',
+    event: 'sound_effect',
+    payload,
+  });
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast floating image reaction (bai.png / pagpag.png) to all clients in global chat
+// ---------------------------------------------------------------------------
+export function sendReactionBroadcast(payload: FloatingReactionPayload): boolean {
+  if (!chatChannel || !channelReady) {
+    console.warn('[Chat] Cannot broadcast reaction — realtime channel not ready');
+    return false;
+  }
+  chatChannel.send({
+    type: 'broadcast',
+    event: 'floating_reaction',
+    payload,
+  });
+  return true;
+}
+
+
